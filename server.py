@@ -440,8 +440,39 @@ def _salvar_previsao_cache(dado):
     except OSError:
         pass  # Filesystem do Render Free não é persistente.
 
+def _previsao_met_norway(nome, lat, lon, datas):
+    """Fonte alternativa: MET Norway Locationforecast 2.0.
+
+    Apenas next_1_hours representa uma quantidade prevista para UMA hora.
+    Não converte acumulados de 6/12 horas em intensidade horária.
+    """
+    params=urllib.parse.urlencode({"lat":f"{lat:.3f}","lon":f"{lon:.3f}"})
+    url="https://api.met.no/weatherapi/locationforecast/2.0/compact?"+params
+    req=urllib.request.Request(url,headers={
+        "User-Agent":"MonitoramentoHidrologico3DE/1.0 (https://github.com/gomestopografia-dot/monitoramento-hidrologico-3de)",
+        "Accept":"application/json"})
+    with urllib.request.urlopen(req,timeout=12) as r:
+        dados=json.loads(r.read(2_000_000).decode("utf-8"))
+    series=dados.get("properties",{}).get("timeseries",[])
+    registros=[]
+    for item in series:
+        try:
+            hora=datetime.fromisoformat(item["time"].replace("Z","+00:00")).astimezone(timezone(timedelta(hours=-3)))
+            if hora.date().isoformat() not in datas:continue
+            # Quantidade de precipitação em 1h (mm), numericamente equivalente a mm/h.
+            valor=item["data"]["next_1_hours"]["details"]["precipitation_amount"]
+            if isinstance(valor,bool) or not isinstance(valor,(int,float)) or not math.isfinite(valor) or not 0<=valor<=1000:continue
+            registros.append((hora.strftime("%Y-%m-%dT%H:%M"),float(valor)))
+        except (KeyError,TypeError,ValueError,AttributeError):continue
+    if not registros:raise ValueError("Sem previsões de precipitação de 1 hora válidas")
+    pico,maior=max(registros,key=lambda x:x[1])
+    return {"municipio":nome,"maximoHorarioMmH":round(maior,1),"horaPico":pico,
+            "fonte":"MET Norway","horasValidas":len(registros)}
+
+
 def consultar_previsao():
-    """Uma única consulta Open-Meteo com as 13 coordenadas; tolera horas ausentes."""
+    """Open-Meteo agrupada; MET Norway somente para localidades sem dados."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     hoje=datetime.now(timezone(timedelta(hours=-3))).date()
     datas=[(hoje+timedelta(days=i)).isoformat() for i in range(7)]
     nomes=[p[0] for p in PONTOS_PREVISAO]
@@ -453,11 +484,10 @@ def consultar_previsao():
     url="https://api.open-meteo.com/v1/forecast?"+params
     pontos=[];erros=[]
     try:
-        resposta=getjson(url,timeout=35)
-        if isinstance(resposta,dict):
-            resposta=[resposta]
+        resposta=getjson(url,timeout=25)
+        if isinstance(resposta,dict):resposta=[resposta]
         if not isinstance(resposta,list) or len(resposta)!=len(nomes):
-            raise ValueError(f"Resposta de múltiplas coordenadas inesperada: {len(resposta) if isinstance(resposta,list) else 'formato inválido'}")
+            raise ValueError("Formato de resposta Open-Meteo inesperado")
         for nome,estacao in zip(nomes,resposta):
             try:
                 if not isinstance(estacao,dict) or estacao.get("error"):
@@ -465,25 +495,37 @@ def consultar_previsao():
                 horario=estacao.get("hourly") or {}
                 horas=horario.get("time") or []
                 valores=horario.get("precipitation") or []
-                if len(horas)!=len(valores) or not horas:
-                    raise ValueError("Série horária incompleta")
+                if len(horas)!=len(valores) or not horas:raise ValueError("Série horária incompleta")
                 registros=[(hora,float(valor)) for hora,valor in zip(horas,valores)
                     if isinstance(hora,str) and hora[:10] in datas
                     and isinstance(valor,(int,float)) and not isinstance(valor,bool)
                     and math.isfinite(valor) and 0<=valor<=1000]
-                if not registros:
-                    raise ValueError("Nenhuma hora com previsão válida")
+                if not registros:raise ValueError("Nenhuma hora com previsão válida")
                 hora_max,maior=max(registros,key=lambda x:x[1])
-                pontos.append({"municipio":nome,"maximoHorarioMmH":round(maior,1),"horaPico":hora_max})
+                pontos.append({"municipio":nome,"maximoHorarioMmH":round(maior,1),
+                               "horaPico":hora_max,"fonte":"Open-Meteo","horasValidas":len(registros)})
             except (ValueError,TypeError,AttributeError) as exc:
-                erros.append({"municipio":nome,"erro":str(exc)[:250]})
+                erros.append({"municipio":nome,"fonte":"Open-Meteo","erro":str(exc)[:250]})
     except urllib.error.HTTPError as exc:
-        # Não repetir imediatamente um HTTP 429: aguardar expiração do cache.
         erros.append({"fonte":"Open-Meteo","erro":f"HTTP {exc.code}: {exc.reason}"})
     except Exception as exc:
         erros.append({"fonte":"Open-Meteo","erro":str(exc)[:250]})
+
+    # Não repetir a Open-Meteo em caso de 429. Fonte alternativa independente.
+    faltantes=[p for p in PONTOS_PREVISAO if p[0] not in {x["municipio"] for x in pontos}]
+    if faltantes:
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            tarefas={pool.submit(_previsao_met_norway,nome,lat,lon,datas):nome
+                     for nome,lat,lon in faltantes}
+            for tarefa in as_completed(tarefas):
+                try:pontos.append(tarefa.result())
+                except Exception as exc:
+                    erros.append({"municipio":tarefas[tarefa],"fonte":"MET Norway","erro":str(exc)[:250]})
+    # Ordem estável e resultado transparente quanto à cobertura.
+    pontos.sort(key=lambda p:nomes.index(p["municipio"]))
     maior=max(pontos,key=lambda p:p["maximoHorarioMmH"]) if pontos else None
     acima=[p for p in pontos if p["maximoHorarioMmH"]>50.0]
+    fontes=sorted({p["fonte"] for p in pontos})
     return {"disponivel":bool(pontos),"acima50":bool(acima),
         "maiorIntensidadeMmH":maior["maximoHorarioMmH"] if maior else None,
         "municipioMaiorIntensidade":maior["municipio"] if maior else None,
@@ -492,8 +534,8 @@ def consultar_previsao():
         "pontosRecebidos":len(pontos),"pontosEsperados":len(PONTOS_PREVISAO),
         "coberturaCompleta":len(pontos)==len(PONTOS_PREVISAO),
         "inicio":datas[0],"fim":datas[-1],
-        "fonte":"Open-Meteo: precipitação horária prevista",
-        "metodologia":"Gatilho quando qualquer município tiver uma hora prevista com precipitação superior a 50,0 mm/h; não é probabilidade operacional",
+        "fonte":" / ".join(fontes) if fontes else "Open-Meteo / MET Norway (sem dados)",
+        "metodologia":"Gatilho quando qualquer município tiver uma hora prevista com precipitação superior a 50,0 mm/h; não é probabilidade operacional. Fonte MET Norway pode ter cobertura horária inferior a 7 dias.",
         "erro":None,"atualizadoEm":datetime.now(timezone(timedelta(hours=-3))).isoformat()}
 
 def obter_previsao_cache():
