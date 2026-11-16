@@ -142,7 +142,7 @@ function card(mun,rio,e){
  const inundacao=Object.hasOwn(cotasInundacao,mun)?metros(cotasInundacao[mun]):'—';
  const info=trend(e);
  const aviso='';
- return `<article class="river"><div class="row">${nomeMunicipioLink(mun)}<span class="muted">${esc(e?.dataHoraShort||'Sem horário')}</span></div><div class="levels" style="margin:3px 0"><span class="current">${atual}</span><span class="sep">–</span><span class="threshold">${inundacao}</span>${aviso}</div><div class="row"><span>${info}</span><span class="pill ${estado.cor}" title="${!e?'Sem leitura confirmada':estado.recente?'Medição recente':'Última medição disponível; dado com 12 horas ou mais'}">${esc(estado.rotulo)}</span></div></article>`;
+ return `<article class="river"><div class="row">${nomeMunicipioLink(mun)}<span class="pill ${estado.cor}" title="${!e?'Sem leitura confirmada':estado.recente?'Medição recente':'Última medição disponível; dado com 12 horas ou mais'}">${esc(estado.rotulo)}</span></div><div class="levels" style="margin:3px 0"><span class="current">${atual}</span><span class="sep">–</span><span class="threshold">${inundacao}</span>${aviso}</div><div class="row"><span>${info}</span><span class="muted">${esc(e?.dataHoraShort||'Sem horário')}</span></div></article>`;
 }
 async function consultarSaoBorjaIndependente(){
  try {
@@ -227,7 +227,11 @@ async function atualizarPrevisao(){
   const mm=d.maiorIntensidadeMmH===null||d.maiorIntensidadeMmH===undefined?NaN:Number(d.maiorIntensidadeMmH);
   chuva.textContent=Number.isFinite(mm)?mm.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})+" mm/h":"indisponível";
   document.getElementById("municipio-chuva").textContent=Number.isFinite(mm)&&d.municipioMaiorIntensidade?" em "+d.municipioMaiorIntensidade:"";
-  const pico=Number.isFinite(mm)&&d.horaMaiorIntensidade?" (pico: "+d.horaMaiorIntensidade.replace("T"," ")+")":"";
+  function formatarHoraPico(valor){
+    const m=String(valor||"").match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    return m ? `${m[4]}:${m[5]} ${m[3]}-${m[2]}-${m[1]}` : String(valor||"").replace("T"," ");
+  }
+  const pico=Number.isFinite(mm)&&d.horaMaiorIntensidade?" (pico: "+formatarHoraPico(d.horaMaiorIntensidade)+")":"";
   document.getElementById("municipio-chuva").textContent+=pico;
   indicativo.textContent=(d.acima50?"É provável":"É pouco provável")+" a solicitação para o emprego de OM da 3ª DE em sua Área de Segurança Integrada (ASI).";
   atualizacao.textContent=(!Number.isFinite(mm)?" Nenhuma previsão válida foi recebida. Verifique os erros em /api/previsao.":"")+(d.coberturaCompleta?"":" Cobertura parcial: "+d.pontosRecebidos+"/"+d.pontosEsperados+" localidades.")+(d.atualizadoEm?" Consulta: "+new Date(d.atualizadoEm).toLocaleString("pt-BR"):"");
