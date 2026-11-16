@@ -142,7 +142,7 @@ function card(mun,rio,e){
  const atual=e&&e.nivelMetros!=null?metros(e.nivelMetros):'—';
  const inundacao=Object.hasOwn(cotasInundacao,mun)?metros(cotasInundacao[mun]):'—';
  const info=trend(e);
- const aviso=(mun==='Arroio do Meio'&&e?.codigoFonte==='DCRS-00104')?' <span class="muted" title="A cota municipal de 24,50 m ainda não foi validada para o referencial da estação DCRS-00104">(referencial da cota em validação)</span>':'';
+ const aviso='';
  return `<article class="river"><div class="row">${nomeMunicipioLink(mun)}<span class="pill ${estado.cor}" title="${!e?'Sem leitura confirmada':estado.recente?'Medição recente':'Última medição disponível; dado com 12 horas ou mais'}">${esc(estado.rotulo)}</span></div><div class="levels" style="margin:3px 0"><span class="current">${atual}</span><span class="sep">–</span><span class="threshold">${inundacao}</span>${aviso}</div><div class="row"><span>${info}</span><span class="muted">${esc(e?.dataHoraShort||'Sem horário')}</span></div></article>`;
 }
 async function consultarSaoBorjaIndependente(){
