@@ -362,26 +362,109 @@ def consultar():
             if est:dados["estacoes"].append(est)
         except Exception as e:
             dados["erros"].append("ANA legado "+nome+": "+str(e))
-    # Arroio do Meio: somente a estação 86878700, obtida do ClimaRS.
-    # Não substituir por estações próximas e não consultar ANA legado enquanto
-    # o acesso autorizado à HidroWebService não estiver disponível.
-    codigo_am="86878700"
-    candidatos_am=[e for e in dados['estacoes'] if str(e.get('codigoEstacao') or '').strip()==codigo_am]
+    # Arroio do Meio: estação DCRS-00104 da Defesa Civil RS (Rio Taquari).
+    # A fonte ClimaRS/ANA 86878700 não vinha fornecendo leitura; a estação
+    # estadual tem código distinto, portanto a identidade é mostrada explicitamente.
     dados['estacoes']=[e for e in dados['estacoes']
         if normal(e.get('municipio'))!='arroio do meio' and
-           str(e.get('codigoEstacao') or '').strip()!=codigo_am]
-    est_am=next((e for e in candidatos_am if e.get('nivelMetros') is not None),None)
+           str(e.get('codigoEstacao') or '').strip()!='86878700']
+    est_am, diag_am = consultar_arroio_dcrs()
+    dados['arroioDoMeioDiagnostico']=diag_am
     if est_am:
-        est_am=dict(est_am)
-        est_am.update(municipio='Arroio do Meio',rio='RIO TAQUARI')
         dados['estacoes'].append(est_am)
-        dados['arroioDoMeioDiagnostico']={'fonte':'ClimaRS/ANA','codigoANA':codigo_am,
-            'automatico':True,'ultimaMedicao':est_am.get('dataHoraMedicao')}
     else:
-        dados['arroioDoMeioDiagnostico']={'fonte':'ClimaRS','codigoANA':codigo_am,
-            'automatico':False,'observacao':'Estação 86878700 não retornou nível válido pelo ClimaRS; sem leitura confirmada.'}
-        dados['erros'].append('Arroio do Meio: estação 86878700 sem leitura confirmada no ClimaRS.')
+        dados['erros'].append('Arroio do Meio: DCRS-00104 sem leitura atual confirmada.')
     return dados
+
+# Consulta pública oficial, sem credenciais HidroWebService da ANA.
+# O endpoint só permite a consulta Historic no formato documentado.
+DCRS_GRAPHQL='https://redehidrometeorologica.defesacivil.rs.gov.br/graphql'
+DCRS_HISTORIC_QUERY="""query Historic($stationCode: String!, $startDate: String!, $endDate: String!, $interval: QueryInterval) {
+  historic(
+    system: Qualle_Hidrometeorologia
+    client: "casa-militar-defesa-civil-rs"
+    stationCode: $stationCode
+    startDate: $startDate
+    endDate: $endDate
+    interval: $interval
+    opts: { ordenacao: ASC }
+  )
+}"""
+
+def consultar_arroio_dcrs():
+    diag={'fonte':'Defesa Civil RS / Rede Hidrometeorológica',
+          'estacao':'DCRS-00104','municipio':'Arroio do Meio',
+          'codigoANAAnterior':'86878700','automatico':False,
+          'url':DCRS_GRAPHQL}
+    try:
+        tz=timezone(timedelta(hours=-3))
+        agora=datetime.now(tz)
+        inicio=agora-timedelta(hours=26)
+        payload=json.dumps({'query':DCRS_HISTORIC_QUERY,'variables':{
+            'stationCode':'DCRS-00104',
+            'startDate':inicio.strftime('%Y-%m-%d %H:%M:%S'),
+            'endDate':agora.strftime('%Y-%m-%d %H:%M:%S'),
+            'interval':'HOUR_1'}}).encode('utf-8')
+        req=urllib.request.Request(DCRS_GRAPHQL,data=payload,headers={
+            'Content-Type':'application/json','Accept':'application/json',
+            'User-Agent':'Dashboard-Hidrologico-3DE/1.0'},method='POST')
+        with urllib.request.urlopen(req,timeout=22) as r:
+            resposta=json.loads(r.read(3_000_000).decode('utf-8'))
+        if resposta.get('errors'):
+            raise ValueError(str(resposta['errors'])[:250])
+        historico=((resposta.get('data') or {}).get('historic') or {})
+        items=historico.get('items') or []
+        leituras=[]
+        for item in items:
+            if str(item.get('codigo') or 'DCRS-00104')!='DCRS-00104':continue
+            valor=item.get('rio_nivel')
+            if isinstance(valor,bool) or not isinstance(valor,(int,float)) or not math.isfinite(valor) or not 0<=valor<=100:continue
+            try:
+                instante=datetime.fromisoformat(str(item['ts']).replace('Z','+00:00'))
+                if instante.tzinfo is None:instante=instante.replace(tzinfo=tz)
+                instante=instante.astimezone(tz)
+            except (ValueError,TypeError):continue
+            if -300<=(agora-instante).total_seconds()<=26*3600:
+                leituras.append((instante,float(valor),item.get('rio_variacao')))
+        if not leituras:raise ValueError('Nenhuma medição válida na resposta da estação DCRS-00104')
+        leituras.sort(key=lambda x:x[0]); instante,nivel,variacao=leituras[-1]
+        idade=(agora-instante).total_seconds()/3600
+        if idade>12:raise ValueError(f'Última leitura tem {idade:.1f} h; não é atual')
+        delta=None
+        if isinstance(variacao,(int,float)) and not isinstance(variacao,bool) and math.isfinite(variacao):
+            delta=round(variacao*100,1)
+        if delta is None:
+            anteriores=[(abs((instante-d).total_seconds()-3600),v) for d,v,_ in leituras[:-1]
+                        if 1800<=(instante-d).total_seconds()<=5400]
+            if anteriores:delta=round((nivel-min(anteriores)[1])*100,1)
+        tendencia=None
+        if delta is not None:
+            num=('%g'%abs(delta)).replace('.',',')
+            tendencia=('Subiu '+num+' cm na última hora' if delta>0 else
+                       'Desceu '+num+' cm na última hora' if delta<0 else
+                       'Estável na última hora')
+        # Cota municipal de 24,50 m: só pode ser aplicada se o referencial
+        # altimétrico da estação DCRS for confirmado como compatível.
+        est={'codigoEstacao':'86878700','codigoFonte':'DCRS-00104',
+             'nomeEstacao':'Arroio do Meio (DCRS-00104)',
+             'municipio':'Arroio do Meio','rio':'RIO TAQUARI',
+             'nivelCm':round(nivel*100,1),'nivelMetros':nivel,
+             'dataHoraMedicao':instante.strftime('%d/%m/%Y %H:%M:%S'),
+             'dataHoraShort':instante.strftime('%d/%m %H:%M'),
+             'confiavel':True,'status':'SEM_CLASSIFICACAO',
+             'statusLabel':'Leitura confirmada; referencial da cota em validação',
+             'taxaMudanca':tendencia,'taxaMudancaValor':delta,
+             'fonte':'Defesa Civil RS (DCRS-00104)',
+             'latitude':-29.402,'longitude':-51.944,
+             'horasDesdeMedicao':round(idade,1)}
+        diag.update(automatico=True,ultimaMedicao=est['dataHoraMedicao'],
+                    nivelMetros=nivel,registrosValidos=len(leituras),
+                    observacao='Cota municipal de 24,50 m não aplicada à estação DCRS até validação de referencial.')
+        return est,diag
+    except Exception as exc:
+        diag['erro']=str(exc)[:300]
+        diag['observacao']='Não publicar leitura fictícia nem reutilizar dados antigos.'
+        return None,diag
 
 def ana_por_codigo(nome,codigo):
     agora=datetime.now().astimezone()
