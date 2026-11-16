@@ -218,6 +218,7 @@ async function atualizar(){
  if(camada && mun!=="Arroio do Meio" && Number.isFinite(Number(e.latitude))&&Number.isFinite(Number(e.longitude))){const c=cor(e,mun);const cores={green:"#42ba72",orange:"#f3a13d",red:"#e94b55",gray:"#f3a13d",'sem-cota':'#8294a4'};L.circleMarker([Number(e.latitude),Number(e.longitude)],{radius:9,color:"#fff",weight:2,fillColor:cores[c],fillOpacity:.95}).addTo(camada).bindPopup(`<b>${esc(g.rio)} — ${esc(mun)}${mun==="São Borja"?" (estação Passo São Borja)":""}</b><br>${esc(e.nomeEstacao)}<br>${Number(e.nivelMetros).toLocaleString("pt-BR")} m<br>${esc(e.dataHoraMedicao)}`)}
  }}}
  document.getElementById(lado).innerHTML=html}
+ atualizarChuvaQuadros();
  document.getElementById("total").textContent=selecionadas+" leituras vinculadas";
  if(window.saceItaqui){const caixa=[...document.querySelectorAll('#left article.river')].find(el=>el.querySelector('a')?.textContent.trim()==='Itaqui');if(caixa)caixa.outerHTML=card('Itaqui','Rio Uruguai',window.saceItaqui.estacao)}
  if(window.saceSaoBorja){const caixa=document.querySelector("#left article.river");if(caixa)caixa.outerHTML=card("São Borja","Rio Uruguai",window.saceSaoBorja.estacao)}
@@ -247,7 +248,6 @@ async function atualizarPrevisao(){
   chuva.textContent=Number.isFinite(media)?media.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})+" mm":"indisponível";
   const parcial=Boolean(d.mediaParcial);
   document.getElementById("tipo-media-chuva").textContent=parcial?"média parcial da previsão de chuvas para a semana de":"média da previsão de chuvas para a semana de";
-  document.getElementById("municipio-chuva").textContent="";
   indicativo.textContent=(d.acima50?"É provável":"É pouco provável")+" a solicitação para o emprego de OM da 3ª DE em sua Área de Segurança Integrada (ASI).";
   atualizacao.textContent=(parcial?" ATENÇÃO: acumulados parciais, referentes a "+(d.horasCoberturaMedia??0)+" horas previstas por município; não representam os sete dias completos.":"")+
    (!Number.isFinite(media)?" Sem dados comparáveis para calcular a média.":"")+
@@ -256,7 +256,6 @@ async function atualizarPrevisao(){
  }catch(e){
   chuva.textContent="indisponível";
   previsaoMunicipal={};atualizarChuvaQuadros();
-  document.getElementById("municipio-chuva").textContent="";
   indicativo.textContent="Indicativo de chuva indisponível: não foi possível verificar o limite de 50,0 mm/h.";
   atualizacao.textContent=" Dados meteorológicos indisponíveis. ("+e.message+")";
  }
