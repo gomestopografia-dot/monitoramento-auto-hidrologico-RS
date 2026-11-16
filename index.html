@@ -87,7 +87,6 @@ function horasDaMedicao(e){
  return Math.max(0,(Date.now()-d.getTime())/3600000);
 }
 function classificacao(e,mun){
- if(mun==='Arroio do Meio' && e?.codigoFonte==='DCRS-00104')return {cor:'orange',rotulo:'Cota em validação',recente:horasDaMedicao(e)<12};
  const limite=cotasInundacao[mun];const nivel=Number(e?.nivelMetros);
  if(!e||e.nivelMetros==null||!Number.isFinite(nivel)||!Number.isFinite(limite)||limite<=0)return {cor:'orange',rotulo:'Sem leitura',recente:false};
  const recente=horasDaMedicao(e)<12;
@@ -143,7 +142,7 @@ function card(mun,rio,e){
  const inundacao=Object.hasOwn(cotasInundacao,mun)?metros(cotasInundacao[mun]):'—';
  const info=trend(e);
  const aviso='';
- return `<article class="river"><div class="row">${nomeMunicipioLink(mun)}${mun==='Arroio do Meio' && estado.rotulo==='Cota em validação' ? '' : `<span class="pill ${estado.cor}" title="${!e?'Sem leitura confirmada':estado.recente?'Medição recente':'Última medição disponível; dado com 12 horas ou mais'}">${esc(estado.rotulo)}</span>`}</div><div class="levels" style="margin:3px 0"><span class="current">${atual}</span><span class="sep">–</span><span class="threshold">${inundacao}</span>${aviso}</div><div class="row"><span>${info}</span><span class="muted">${esc(e?.dataHoraShort||'Sem horário')}</span></div></article>`;
+ return `<article class="river"><div class="row">${nomeMunicipioLink(mun)}<span class="muted">${esc(e?.dataHoraShort||'Sem horário')}</span></div><div class="levels" style="margin:3px 0"><span class="current">${atual}</span><span class="sep">–</span><span class="threshold">${inundacao}</span>${aviso}</div><div class="row"><span>${info}</span><span class="pill ${estado.cor}" title="${!e?'Sem leitura confirmada':estado.recente?'Medição recente':'Última medição disponível; dado com 12 horas ou mais'}">${esc(estado.rotulo)}</span></div></article>`;
 }
 async function consultarSaoBorjaIndependente(){
  try {
