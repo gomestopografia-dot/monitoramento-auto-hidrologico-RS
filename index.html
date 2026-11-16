@@ -80,10 +80,11 @@ else document.getElementById("map").innerHTML='<p style="padding:30px">Mapa indi
 // Três regiões hidrográficas do RS, obtidas por consulta ao serviço cartográfico estadual.
 // Não altera os marcadores nem as atualizações hidrológicas existentes.
 const REGIOES_HIDROGRAFICAS={
- uruguai:{nome:'Bacia Hidrográfica do Uruguai',cor:'#FFF4B8',chaves:['uruguai']},
- guaiba:{nome:'Bacia Hidrográfica do Guaíba',cor:'#CDEFD5',chaves:['guaiba']},
- litoranea:{nome:'Bacia Hidrográfica Litorânea',cor:'#F8D7E8',chaves:['litoranea','litoraneas','litoral']}
+ uruguai:{nome:'Bacia Hidrográfica do Uruguai',cor:'#F3DE83',chaves:['uruguai']},
+ guaiba:{nome:'Bacia Hidrográfica do Guaíba',cor:'#A6DDB6',chaves:['guaiba','guaíba']},
+ litoranea:{nome:'Bacia Hidrográfica Litorânea',cor:'#EBAFCB',chaves:['litoranea','litorânea','litoraneas','litorâneas','litoral']}
 };
+// Paleta revisada e busca tolerante a acentos, inclusive Guaíba.
 const URL_BACIAS_RS='https://iede.rs.gov.br/server/rest/services/DRH/Bacias_Hidrograficas/MapServer';
 const camadasBacias={};
 function informarBacias(msg){const el=document.getElementById('bacias-status');if(el){el.hidden=!msg;el.textContent=msg||'';}if(msg)console.warn('[Regiões hidrográficas]',msg)}
@@ -104,21 +105,26 @@ async function carregarRegioesHidrograficas(){
   if(!detalhe.capabilities?.includes('Query')&&!detalhe.fields?.length)continue;
   const campos=(detalhe.fields||[]).filter(f=>f.type==='esriFieldTypeString'&&!/^(objectid|globalid|created|edited)/i.test(f.name));
   if(!campos.length)continue;
-  // Solicita atributos e geometria somente da região buscada, sem baixar toda a base de sub-bacias.
+  // Consulta por campo com variantes acentuadas, sem depender da collation SQL do servidor.
+  // O filtro final normaliza os atributos e impede a inclusão de outras regiões.
   for(const [chave,reg] of Object.entries(REGIOES_HIDROGRAFICAS)){
    if(camadasBacias[chave])continue;
-   const termos=reg.chaves;
-   const condicoes=campos.flatMap(f=>termos.map(t=>`UPPER(${f.name}) LIKE '%${t.toUpperCase()}%'`));
-   const params=new URLSearchParams({f:'geojson',where:'('+condicoes.join(' OR ')+')',outFields:'*',returnGeometry:'true',outSR:'4326'});
-   try{
-    const geo=await jsonArcgis(URL_BACIAS_RS+'/'+info.id+'/query?'+params);
-    if(geo.type!=='FeatureCollection'||!geo.features?.length)continue;
-    // Evita pintar regiões indevidas quando uma camada contém textos descritivos de outras bacias.
-    const validas=geo.features.filter(feat=>Object.values(feat.properties||{}).some(v=>typeof v==='string'&&termos.some(t=>normalizarBacia(v).includes(t))));
-    if(!validas.length)continue;
-    const grupo=L.geoJSON({type:'FeatureCollection',features:validas},{style:{color:reg.cor,weight:1.6,opacity:.85,fillColor:reg.cor,fillOpacity:.38},interactive:false});
-    grupo.addTo(mapa);grupo.bringToBack();camadasBacias[chave]=grupo;encontradas++;
-   }catch(e){console.warn('Consulta de bacia',reg.nome,info.name,e.message)}
+   const variantes=[...new Set(reg.chaves.flatMap(t=>[t,t.toUpperCase()]))];
+   const condicoes=campos.flatMap(f=>variantes.map(t=>`UPPER(${f.name}) LIKE '%${t.toUpperCase().replace(/'/g,"''")}%'`));
+   const conjuntos=[];
+   // A consulta em blocos evita URLs grandes demais para alguns servidores ArcGIS.
+   for(let i=0;i<condicoes.length;i+=12){
+    const params=new URLSearchParams({f:'geojson',where:'('+condicoes.slice(i,i+12).join(' OR ')+')',outFields:'*',returnGeometry:'true',outSR:'4326'});
+    try{
+     const geo=await jsonArcgis(URL_BACIAS_RS+'/'+info.id+'/query?'+params);
+     if(geo.type==='FeatureCollection'&&geo.features?.length)conjuntos.push(...geo.features);
+    }catch(e){console.warn('Consulta de região',reg.nome,info.name,e.message)}
+   }
+   const termos=reg.chaves.map(normalizarBacia);
+   const validas=conjuntos.filter(feat=>feat.geometry&&Object.values(feat.properties||{}).some(v=>typeof v==='string'&&termos.some(t=>normalizarBacia(v).includes(t))));
+   if(!validas.length)continue;
+   const grupo=L.geoJSON({type:'FeatureCollection',features:validas},{style:{color:reg.cor,weight:1.7,opacity:.9,fillColor:reg.cor,fillOpacity:.48},interactive:false});
+   grupo.addTo(mapa);grupo.bringToBack();camadasBacias[chave]=grupo;encontradas++;
   }
  }
  const controle={};for(const [chave,reg] of Object.entries(REGIOES_HIDROGRAFICAS))if(camadasBacias[chave])controle[reg.nome]=camadasBacias[chave];
