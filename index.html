@@ -25,10 +25,8 @@ const grupos=[
 {lado:"left",rio:"Rio Quaraí",municipios:["Quaraí"]},
 {lado:"left",rio:"Rio Santa Maria",municipios:["Rosário do Sul"]},
 {lado:"right",rio:"Rio Jacuí",municipios:["Cachoeira do Sul"]},
-{lado:"right",rio:"Rio Taquari",municipios:["Lajeado"]},
+{lado:"right",rio:"Rio Taquari",municipios:["Arroio do Meio","Lajeado"]},
 {lado:"right",rio:"Rio Jacuí",municipios:["Rio Pardo"]},
-{lado:"right",rio:"Rio Jacuí",municipios:["Dona Francisca"]},
-{lado:"right",rio:"Rio Taquari",municipios:["Arroio do Meio"]},
 {lado:"right",rio:"Rio São Sepé",municipios:["São Sepé"]}
 ];
 // Códigos de estação informados pelo usuário; associação por código tem prioridade.
@@ -116,7 +114,7 @@ function trend(e){
  return `<span class="trend ${classe}"><span class="trend-arrow">${seta}</span><span>${esc(tendenciaEmCentimetros(descricao)||"Estável na última hora")}</span></span>`;
 }
 // Cotas verificadas nos dados fornecidos. As demais permanecem indisponíveis até validação.
-const cotasInundacao={"Cachoeira do Sul":9.00,"Lajeado":19.00,"Dona Francisca":7.50,"Arroio do Meio":24.50,"São Sepé":7.00,"São Borja":9.00,"Itaqui":8.30,"Uruguaiana":8.50,"Manoel Viana":9.60,"Alegrete":9.70,"Quaraí":9.50,"Rosário do Sul":6.70,"Rio Pardo":12.50};
+const cotasInundacao={"Cachoeira do Sul":9.00,"Lajeado":19.00,"Arroio do Meio":24.50,"São Sepé":7.00,"São Borja":9.00,"Itaqui":8.30,"Uruguaiana":8.50,"Manoel Viana":9.60,"Alegrete":9.70,"Quaraí":9.50,"Rosário do Sul":6.70,"Rio Pardo":12.50};
 function metros(v){return Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m"}
 // Destinos oficiais por bacia. Os portais podem exigir seleção manual da estação.
 const linksFontesMunicipios={
@@ -130,7 +128,6 @@ const linksFontesMunicipios={
  "Cachoeira do Sul":"https://sace.sgb.gov.br/guaiba/",
  "Lajeado":"https://sace.sgb.gov.br/taquari/",
  "Rio Pardo":"https://sace.sgb.gov.br/guaiba/",
- "Dona Francisca":"https://sace.sgb.gov.br/guaiba/",
  "Arroio do Meio":"https://www.snirh.gov.br/hidrotelemetria/Mapa.aspx",
  "São Sepé":"https://sace.sgb.gov.br/guaiba/"
 };
@@ -180,11 +177,20 @@ async function atualizar(){
  const codigosRetornados=new Set(estacoes.map(e=>String(e.codigoEstacao||"").trim()));
  const faltantes=Object.entries(codigosEstacoes).filter(([m,c])=>!codigosRetornados.has(c)).map(([m,c])=>m+" ("+c+")");
 
- if(camada)camada.clearLayers();
+ if(camada){
+   camada.clearLayers();
+   // Posição aproximada do município, independente da disponibilidade da estação 86878700.
+   // O marcador não implica que haja uma leitura hidrológica válida.
+   const arroio=estacoes.find(e=>String(e.codigoEstacao||'').trim()==='86878700' && e.nivelMetros!=null);
+   const lat=arroio && Number.isFinite(Number(arroio.latitude)) ? Number(arroio.latitude) : -29.402;
+   const lon=arroio && Number.isFinite(Number(arroio.longitude)) ? Number(arroio.longitude) : -51.944;
+   const popup=arroio ? `<b>Arroio do Meio — Rio Taquari</b><br>Estação 86878700<br>${Number(arroio.nivelMetros).toLocaleString('pt-BR')} m<br>${esc(arroio.dataHoraMedicao||'')}` : '<b>Arroio do Meio — Rio Taquari</b><br>Estação 86878700<br>Sem leitura confirmada';
+   L.marker([lat,lon],{title:'Arroio do Meio — estação 86878700'}).addTo(camada).bindPopup(popup);
+ }
  for(const lado of ["left","right"]){let html="";for(const g of grupos.filter(x=>x.lado===lado)){
  html+=`<h3 style="font-size:14px;color:#a7d6e8;margin:16px 0 8px">${esc(g.rio)}</h3>`;
  for(const mun of g.municipios){const e=escolher(estacoes,mun,g.rio);html+=card(mun,g.rio,e);if(e){selecionadas++;
- if(camada && Number.isFinite(Number(e.latitude))&&Number.isFinite(Number(e.longitude))){const c=cor(e,mun);const cores={green:"#42ba72",orange:"#f3a13d",red:"#e94b55",gray:"#f3a13d"};L.circleMarker([Number(e.latitude),Number(e.longitude)],{radius:9,color:"#fff",weight:2,fillColor:cores[c],fillOpacity:.95}).addTo(camada).bindPopup(`<b>${esc(g.rio)} — ${esc(mun)}${mun==="São Borja"?" (estação Passo São Borja)":""}</b><br>${esc(e.nomeEstacao)}<br>${Number(e.nivelMetros).toLocaleString("pt-BR")} m<br>${esc(e.dataHoraMedicao)}`)}
+ if(camada && mun!=="Arroio do Meio" && Number.isFinite(Number(e.latitude))&&Number.isFinite(Number(e.longitude))){const c=cor(e,mun);const cores={green:"#42ba72",orange:"#f3a13d",red:"#e94b55",gray:"#f3a13d"};L.circleMarker([Number(e.latitude),Number(e.longitude)],{radius:9,color:"#fff",weight:2,fillColor:cores[c],fillOpacity:.95}).addTo(camada).bindPopup(`<b>${esc(g.rio)} — ${esc(mun)}${mun==="São Borja"?" (estação Passo São Borja)":""}</b><br>${esc(e.nomeEstacao)}<br>${Number(e.nivelMetros).toLocaleString("pt-BR")} m<br>${esc(e.dataHoraMedicao)}`)}
  }}}
  document.getElementById(lado).innerHTML=html}
  document.getElementById("total").textContent=selecionadas+" leituras vinculadas";
