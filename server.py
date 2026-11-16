@@ -388,6 +388,25 @@ def consultar():
         except Exception as exc:
             dados['arroioDoMeioDiagnostico']={'fonte':'ANA legado','codigoANA':codigo_am,'automatico':False,'erro':str(exc)[:250]}
             dados['erros'].append('Arroio do Meio: consulta automática indisponível.')
+    # Santa Maria: estação 85436000, sem substituição por outras estações.
+    codigo_sm='85436000'
+    candidatos_sm=[e for e in dados['estacoes'] if str(e.get('codigoEstacao') or '').strip()==codigo_sm]
+    dados['estacoes']=[e for e in dados['estacoes'] if str(e.get('codigoEstacao') or '').strip()!=codigo_sm]
+    est_sm=next((e for e in candidatos_sm if e.get('nivelMetros') is not None),None)
+    if est_sm:
+        est_sm=dict(est_sm)
+        est_sm.update(municipio='Santa Maria',codigoEstacao=codigo_sm)
+        dados['estacoes'].append(est_sm)
+        dados['santaMariaDiagnostico']={'fonte':'ClimaRS/ANA','codigoANA':codigo_sm,'automatico':True,'ultimaMedicao':est_sm.get('dataHoraMedicao')}
+    else:
+        try:
+            est_sm,diag_sm=ana_por_codigo('Santa Maria',codigo_sm)
+            dados['santaMariaDiagnostico']={**diag_sm,'automatico':bool(est_sm)}
+            if est_sm: dados['estacoes'].append(est_sm)
+            else: dados['erros'].append('Santa Maria: estação 85436000 sem leitura recente confirmada.')
+        except Exception as exc:
+            dados['santaMariaDiagnostico']={'fonte':'ANA legado','codigoANA':codigo_sm,'automatico':False,'erro':str(exc)[:250]}
+            dados['erros'].append('Santa Maria: consulta automática indisponível.')
     return dados
 
 def ana_por_codigo(nome,codigo):
@@ -434,6 +453,18 @@ def ana_por_codigo(nome,codigo):
             'statusLabel':'Inundação' if nivel>=2450 else 'Abaixo da inundação',
             'taxaMudanca':None,'taxaMudancaValor':None,
             'fonte':'ANA telemetria (legado)','horasDesdeMedicao':round(horas,1)},diag
+    if nome=='Santa Maria':
+        # Cota de inundação não informada; não classificar como normal/inundação.
+        if horas>12:
+            diag['observacao']='Leitura superior a 12 horas; não publicada como atual'
+            return None,diag
+        return {'codigoEstacao':codigo,'nomeEstacao':'Santa Maria',
+            'municipio':nome,'rio':'RIO VACACAÍ','nivelCm':nivel,
+            'nivelMetros':nivel/100,'dataHoraMedicao':instante.strftime('%d/%m/%Y %H:%M:%S'),
+            'dataHoraShort':instante.strftime('%d/%m %H:%M'),'confiavel':True,
+            'status':'SEM_CLASSIFICACAO','statusLabel':'Cota de inundação não informada',
+            'taxaMudanca':None,'taxaMudancaValor':None,
+            'fonte':'ANA telemetria (legado)','horasDesdeMedicao':round(horas,1)},diag
     # Nível ANA é expresso em centímetros na API de telemetria.
     return {"codigoEstacao":codigo,"nomeEstacao":nome,"municipio":nome,
       "rio":{"São Borja":"RIO URUGUAI","Rio Pardo":"RIO JACUÍ","São Sepé":"RIO SÃO SEPÉ"}[nome],
@@ -458,6 +489,7 @@ PONTOS_PREVISAO=[
     ("Rio Pardo",-29.990,-52.378),
     ("Dona Francisca",-29.619,-53.362),
     ("Arroio do Meio",-29.402,-51.944),
+    ("Santa Maria",-29.684,-53.807),
     ("São Sepé",-30.164,-53.565),
 ]
 PREVISAO_CACHE={"time":0,"data":None,"ultima_valida":None}
