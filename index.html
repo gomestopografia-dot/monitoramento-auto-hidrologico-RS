@@ -317,7 +317,7 @@ async function atualizarPrevisao(){
   indicativo.textContent=(d.acima50?"É provável":"É pouco provável")+" a solicitação para o emprego de OM na Área de Segurança Integrada (ASI).";
   atualizacao.textContent=(parcial?" ATENÇÃO: acumulados parciais, referentes a "+(d.horasCoberturaMedia??0)+" horas previstas por município; não representam os sete dias completos.":"")+
    (!Number.isFinite(media)?" Sem dados comparáveis para calcular a média.":"")+
-   " Municípios na média: "+(d.municipiosMediaRecebidos??0)+"/"+(d.municipiosMediaEsperados??12)+"."+
+   " Municípios na média: "+(d.municipiosMediaRecebidos??0)+"/"+(d.municipiosMediaEsperados??13)+"."+
    (d.atualizadoEm?" Consulta: "+new Date(d.atualizadoEm).toLocaleString("pt-BR"):"");
  }catch(e){
   chuva.textContent="indisponível";

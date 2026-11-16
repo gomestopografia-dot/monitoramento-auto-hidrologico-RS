@@ -659,7 +659,7 @@ def ana_por_codigo(nome,codigo):
       "fonte":"ANA legado","horasDesdeMedicao":round(horas,1)},diag
 
 
-# Previsão de 7 dias: todos os 12 municípios representados nos cartões do painel.
+# Previsão de 7 dias: todos os 13 municípios representados nos cartões do painel.
 # Barra do Fão é uma localidade, representada por coordenadas da região da estação.
 PONTOS_PREVISAO=[
     ("São Borja",-28.660,-56.004),
@@ -674,6 +674,7 @@ PONTOS_PREVISAO=[
     ("Rio Pardo",-29.990,-52.378),
     ("Arroio do Meio",-29.402,-51.944),
     ("São Sepé",-30.164,-53.565),
+    ("Santa Maria",-29.6842,-53.8069),
 ]
 PREVISAO_CACHE={"time":0,"data":None,"ultima_valida":None}
 PREVISAO_LOCK=threading.Lock()
