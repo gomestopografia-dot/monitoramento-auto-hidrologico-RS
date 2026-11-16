@@ -683,9 +683,25 @@ def consultar_previsao():
     fontes=sorted({p["fonte"] for p in pontos})
     # Média municipal dos acumulados de sete dias, somente para séries completas.
     completos=[p for p in pontos if p.get("acumuladoCompleto")]
-    media_semanal=round(sum(p["acumuladoPrevistoMm"] for p in completos)/len(completos),1) if completos else None
+    # Não apresentar a previsão parcial da MET Norway como acumulado de sete dias.
+    # Quando não houver séries completas, comparar apenas municípios com a mesma
+    # quantidade de horas válidas; períodos de tamanhos distintos não são comparáveis.
+    if completos:
+        base_media=completos
+        media_parcial=False
+    else:
+        grupos={}
+        for p in pontos:
+            horas=p.get("horasValidas",0)
+            if horas and isinstance(p.get("acumuladoPrevistoMm"),(int,float)):
+                grupos.setdefault(horas,[]).append(p)
+        base_media=max(grupos.values(),key=lambda grupo:(len(grupo),grupo[0]["horasValidas"])) if grupos else []
+        media_parcial=bool(base_media)
+    media_semanal=round(sum(p["acumuladoPrevistoMm"] for p in base_media)/len(base_media),1) if base_media else None
     return {"mediaAcumuladaMunicipiosMm":media_semanal,
-        "municipiosMediaRecebidos":len(completos),
+        "mediaParcial":media_parcial,
+        "horasCoberturaMedia":base_media[0].get("horasValidas") if base_media else 0,
+        "municipiosMediaRecebidos":len(base_media),
         "municipiosMediaEsperados":len(PONTOS_PREVISAO),"disponivel":bool(pontos),"acima50":bool(acima),
         "maiorIntensidadeMmH":maior["maximoHorarioMmH"] if maior else None,
         "municipioMaiorIntensidade":maior["municipio"] if maior else None,
