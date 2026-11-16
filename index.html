@@ -28,7 +28,7 @@ const grupos=[
 {lado:"right",rio:"Rio Taquari",municipios:["Lajeado"]},
 {lado:"right",rio:"Rio Jacuí",municipios:["Rio Pardo"]},
 {lado:"right",rio:"Rio Jacuí",municipios:["Dona Francisca"]},
-{lado:"right",rio:"Rio Forqueta",municipios:["Barra do Fão"]},
+{lado:"right",rio:"Rio Taquari",municipios:["Arroio do Meio"]},
 {lado:"right",rio:"Rio São Sepé",municipios:["São Sepé"]}
 ];
 // Códigos de estação informados pelo usuário; associação por código tem prioridade.
@@ -38,10 +38,10 @@ const codigosEstacoes={
  "Rosário do Sul":"76310000",
  "Rio Pardo":"85900000",
 
- "Barra do Fão":"86780000",
+ "Arroio do Meio":"86878700",
  "São Sepé":"85623010"
 };
-const aliases={"Cachoeira do Sul":["passo sao lourenco","passo são lourenço"],"São Sepé":["camping sao sape","camping sao sepe"],"São Borja":["passo sao borja"],"Barra do Fão":["barra do fao"],"Lajeado":["estrela"],"Manoel Viana":["manoel viana","manuel viana"]};
+const aliases={"Cachoeira do Sul":["passo sao lourenco","passo são lourenço"],"São Sepé":["camping sao sape","camping sao sepe"],"São Borja":["passo sao borja"],"Arroio do Meio":["arroio do meio"],"Lajeado":["estrela"],"Manoel Viana":["manoel viana","manuel viana"]};
 function norm(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()}
 function match(e,municipio,rio){
  const nomes=(aliases[municipio]||[norm(municipio)]).map(norm);
@@ -116,7 +116,7 @@ function trend(e){
  return `<span class="trend ${classe}"><span class="trend-arrow">${seta}</span><span>${esc(tendenciaEmCentimetros(descricao)||"Estável na última hora")}</span></span>`;
 }
 // Cotas verificadas nos dados fornecidos. As demais permanecem indisponíveis até validação.
-const cotasInundacao={"Cachoeira do Sul":9.00,"Lajeado":19.00,"Dona Francisca":7.50,"Barra do Fão":10.00,"São Sepé":7.00,"São Borja":9.00,"Itaqui":8.30,"Uruguaiana":8.50,"Manoel Viana":9.60,"Alegrete":9.70,"Quaraí":9.50,"Rosário do Sul":6.70,"Rio Pardo":12.50};
+const cotasInundacao={"Cachoeira do Sul":9.00,"Lajeado":19.00,"Dona Francisca":7.50,"Arroio do Meio":24.50,"São Sepé":7.00,"São Borja":9.00,"Itaqui":8.30,"Uruguaiana":8.50,"Manoel Viana":9.60,"Alegrete":9.70,"Quaraí":9.50,"Rosário do Sul":6.70,"Rio Pardo":12.50};
 function metros(v){return Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m"}
 // Destinos oficiais por bacia. Os portais podem exigir seleção manual da estação.
 const linksFontesMunicipios={
@@ -131,7 +131,7 @@ const linksFontesMunicipios={
  "Lajeado":"https://sace.sgb.gov.br/taquari/",
  "Rio Pardo":"https://sace.sgb.gov.br/guaiba/",
  "Dona Francisca":"https://sace.sgb.gov.br/guaiba/",
- "Barra do Fão":"https://sace.sgb.gov.br/taquari/",
+ "Arroio do Meio":"https://www.snirh.gov.br/hidrotelemetria/Mapa.aspx",
  "São Sepé":"https://sace.sgb.gov.br/guaiba/"
 };
 function nomeMunicipioLink(mun){

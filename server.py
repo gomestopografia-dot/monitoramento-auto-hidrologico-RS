@@ -362,6 +362,32 @@ def consultar():
             if est:dados["estacoes"].append(est)
         except Exception as e:
             dados["erros"].append("ANA legado "+nome+": "+str(e))
+    # Arroio do Meio: somente a estação ANA 86878700, sem usar outra estação.
+    # Primeiro aproveita a leitura da mesma estação já obtida pelo ClimaRS;
+    # caso não exista, tenta o serviço público legado da ANA.
+    codigo_am="86878700"
+    candidatos_am=[e for e in dados['estacoes'] if str(e.get('codigoEstacao') or '').strip()==codigo_am]
+    dados['estacoes']=[e for e in dados['estacoes'] if normal(e.get('municipio'))!='arroio do meio' and str(e.get('codigoEstacao') or '').strip()!=codigo_am]
+    if candidatos_am:
+        est_am=next((e for e in candidatos_am if e.get('nivelMetros') is not None),None)
+        if est_am:
+            est_am=dict(est_am)
+            est_am.update(municipio='Arroio do Meio',rio='RIO TAQUARI')
+            dados['estacoes'].append(est_am)
+            dados['arroioDoMeioDiagnostico']={'fonte':'ClimaRS/ANA','codigoANA':codigo_am,'automatico':True,'ultimaMedicao':est_am.get('dataHoraMedicao')}
+        else:
+            dados['arroioDoMeioDiagnostico']={'fonte':'ClimaRS/ANA','codigoANA':codigo_am,'automatico':False,'erro':'Sem nível válido'}
+    else:
+        try:
+            est_am,diag_am=ana_por_codigo('Arroio do Meio',codigo_am)
+            dados['arroioDoMeioDiagnostico']={**diag_am,'automatico':bool(est_am)}
+            if est_am:
+                dados['estacoes'].append(est_am)
+            else:
+                dados['erros'].append('Arroio do Meio: estação 86878700 sem leitura recente confirmada.')
+        except Exception as exc:
+            dados['arroioDoMeioDiagnostico']={'fonte':'ANA legado','codigoANA':codigo_am,'automatico':False,'erro':str(exc)[:250]}
+            dados['erros'].append('Arroio do Meio: consulta automática indisponível.')
     return dados
 
 def ana_por_codigo(nome,codigo):
@@ -395,6 +421,19 @@ def ana_por_codigo(nome,codigo):
     if horas<0 or horas>24:
         diag["observacao"]="Dado antigo ou horário inconsistente; não publicado como atual"
         return None,diag
+    if nome=='Arroio do Meio':
+        # Cota em centímetros; apenas estação 86878700, com horário validado.
+        if horas>12:
+            diag['observacao']='Leitura superior a 12 horas; não publicada como atual'
+            return None,diag
+        return {'codigoEstacao':codigo,'nomeEstacao':'Arroio do Meio',
+            'municipio':nome,'rio':'RIO TAQUARI','nivelCm':nivel,
+            'nivelMetros':nivel/100,'dataHoraMedicao':instante.strftime('%d/%m/%Y %H:%M:%S'),
+            'dataHoraShort':instante.strftime('%d/%m %H:%M'),'confiavel':True,
+            'status':'INUNDACAO' if nivel>=2450 else 'NORMAL',
+            'statusLabel':'Inundação' if nivel>=2450 else 'Abaixo da inundação',
+            'taxaMudanca':None,'taxaMudancaValor':None,
+            'fonte':'ANA telemetria (legado)','horasDesdeMedicao':round(horas,1)},diag
     # Nível ANA é expresso em centímetros na API de telemetria.
     return {"codigoEstacao":codigo,"nomeEstacao":nome,"municipio":nome,
       "rio":{"São Borja":"RIO URUGUAI","Rio Pardo":"RIO JACUÍ","São Sepé":"RIO SÃO SEPÉ"}[nome],
@@ -418,7 +457,7 @@ PONTOS_PREVISAO=[
     ("Lajeado",-29.467,-51.961),
     ("Rio Pardo",-29.990,-52.378),
     ("Dona Francisca",-29.619,-53.362),
-    ("Barra do Fão",-29.170,-52.240),
+    ("Arroio do Meio",-29.402,-51.944),
     ("São Sepé",-30.164,-53.565),
 ]
 PREVISAO_CACHE={"time":0,"data":None,"ultima_valida":None}
