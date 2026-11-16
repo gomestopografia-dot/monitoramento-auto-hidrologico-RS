@@ -5,7 +5,11 @@
 .panel.map-panel>.row{display:flex;justify-content:center;align-items:center;width:100%}
 @media(max-width:600px){.panel.map-panel #titulo-mapa{font-size:clamp(22px,5.8vw,34px)}}
 .forecast-note{margin-top:0px;padding:5px 16px 10px;border-radius:9px;background:#17354b;color:#f2f7fb;text-align:center;font-size:24px;line-height:1.5}.forecast-note p{margin:2px 0 8px;font-size:24px;font-weight:600}.forecast-note small{display:block;font-size:11px;color:#b7cad5}.info-details{display:inline-block;vertical-align:top;margin:0 12px 10px;padding:9px 12px;background:#17354b;border-radius:8px;max-width:calc(100% - 24px)}.info-details summary{cursor:pointer;color:#9cdef7;font-weight:600}.info-details p{font-size:12px;line-height:1.5;max-width:1100px}.legenda-hidrologica{margin:11px 0 2px;padding:10px 15px;background:#102d42;border:1px solid #345369;border-radius:9px;color:#eef7fc;font-size:14px;line-height:1.5}.legenda-titulo{text-align:center;font-weight:800;font-size:15px;margin-bottom:5px}.legenda-item{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;column-gap:9px;min-height:29px;white-space:normal}.legenda-bolinha{display:block;width:13px;height:13px;border-radius:50%;justify-self:center;align-self:center}.legenda-seta{display:flex;align-items:center;justify-content:center;width:34px;height:29px;font-size:34px;line-height:1;font-weight:900;-webkit-text-stroke:1.6px currentColor;text-shadow:0 0 1px currentColor}.fontes-quadro{margin:11px 0 2px;padding:10px 15px;background:#102d42;border:1px solid #345369;border-radius:9px;color:#eef7fc}.fontes-titulo{margin-top:0;margin-bottom:5px}.fontes-logos{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin:0;padding:7px 0 0;border-top:0}.fontes-logos a{display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:6px;padding:7px;min-height:52px;transition:opacity .15s}.fontes-logos a:hover{opacity:.85}.fontes-logos img{display:block;max-width:150px;max-height:43px;width:auto;height:auto}
-.city-link{color:inherit;text-decoration:none;cursor:pointer}.city-link:hover,.city-link:focus-visible{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;color:#9cdef7}.pill.sem-cota{background:#455767;color:#fff}.river .threshold{overflow-wrap:anywhere}.card-meta{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right;flex-shrink:0}.chuva-card{font-size:11px;font-weight:700;color:#9cdef7;white-space:nowrap}.river .trend{min-width:0}</style></head><body><div id="status" role="status" aria-live="polite" hidden></div><main><section class="panel"><h2>BACIA DO URUGUAI</h2><div id="left"></div><aside class="fontes-quadro" aria-label="Fontes oficiais"><div class="fontes-titulo legenda-titulo">FONTES</div><nav class="fontes-logos" aria-label="Fontes oficiais de monitoramento"><a href="https://clima.rs.gov.br/" target="_blank" rel="noopener noreferrer" title="Abrir https://clima.rs.gov.br/"><img src="assets/logo-clima-rs.png" alt="Clima RS"></a><a href="https://sace.sgb.gov.br/" target="_blank" rel="noopener noreferrer" title="Acessar SACE - Serviço Geológico do Brasil"><img src="assets/logo-sgb.png" alt="Serviço Geológico do Brasil - SGB"></a><a href="https://redehidrometeorologica.defesacivil.rs.gov.br/Mapa" target="_blank" rel="noopener noreferrer" title="Abrir mapa da Rede Hidrometeorológica da Defesa Civil RS"><img src="assets/logo-defesa-civil.png" alt="Defesa Civil do Rio Grande do Sul"></a></nav></aside></section><section class="panel map-panel"><div class="row"><h2 id="titulo-mapa">MONITORAMENTO HIDROLÓGICO - 3ª DIVISÃO DE EXÉRCITO</h2><span class="muted" id="total" hidden></span></div><div id="map"></div><div class="forecast-note" id="previsao-semanal" aria-label="Texto de planejamento">
+.city-link{color:inherit;text-decoration:none;cursor:pointer}.city-link:hover,.city-link:focus-visible{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;color:#9cdef7}.pill.sem-cota{background:#455767;color:#fff}.river .threshold{overflow-wrap:anywhere}.card-meta{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right;flex-shrink:0}.chuva-card{font-size:11px;font-weight:700;color:#9cdef7;white-space:nowrap}.river .trend{min-width:0}
+/* Regiões hidrográficas: tons pastéis, limites discretos e controle de visibilidade. */
+.bacias-status{position:absolute;z-index:500;bottom:12px;left:12px;max-width:65%;background:rgba(9,27,43,.88);color:#eaf4fa;padding:5px 8px;border-radius:5px;font-size:11px;pointer-events:none}
+.leaflet-control-layers{font:12px Arial,sans-serif}
+</style></head><body><div id="status" role="status" aria-live="polite" hidden></div><main><section class="panel"><h2>BACIA DO URUGUAI</h2><div id="left"></div><aside class="fontes-quadro" aria-label="Fontes oficiais"><div class="fontes-titulo legenda-titulo">FONTES</div><nav class="fontes-logos" aria-label="Fontes oficiais de monitoramento"><a href="https://clima.rs.gov.br/" target="_blank" rel="noopener noreferrer" title="Abrir https://clima.rs.gov.br/"><img src="assets/logo-clima-rs.png" alt="Clima RS"></a><a href="https://sace.sgb.gov.br/" target="_blank" rel="noopener noreferrer" title="Acessar SACE - Serviço Geológico do Brasil"><img src="assets/logo-sgb.png" alt="Serviço Geológico do Brasil - SGB"></a><a href="https://redehidrometeorologica.defesacivil.rs.gov.br/Mapa" target="_blank" rel="noopener noreferrer" title="Abrir mapa da Rede Hidrometeorológica da Defesa Civil RS"><img src="assets/logo-defesa-civil.png" alt="Defesa Civil do Rio Grande do Sul"></a></nav></aside></section><section class="panel map-panel"><div class="row"><h2 id="titulo-mapa">MONITORAMENTO HIDROLÓGICO - 3ª DIVISÃO DE EXÉRCITO</h2><span class="muted" id="total" hidden></span></div><div id="map"><div id="bacias-status" class="bacias-status" hidden></div></div><div class="forecast-note" id="previsao-semanal" aria-label="Texto de planejamento">
 <p>A <span id="tipo-media-chuva">média da previsão de chuvas para a semana de</span> <strong id="periodo-chuva">—</strong> é de <strong id="chuva-prevista">consultando...</strong>.</p>
 <p><span id="indicativo-om" style="color:#ff4545;font-weight:700">Aguardando previsão de chuva para calcular o indicativo.</span></p>
 <small>Média dos acumulados previstos para os municípios com cobertura comparável. Quando a fonte oferecer menos de 7 dias, o resultado será identificado como parcial (Open-Meteo / MET Norway). O indicativo operacional continua verificando separadamente picos superiores a 50,0 mm/h. Não constitui avaliação operacional. <span id="previsao-atualizacao"></span></small>
@@ -72,6 +76,58 @@ function escolher(estacoes,municipio,rio){
 let mapa,camada;
 if(window.L){mapa=L.map("map").setView([-29.7,-53.9],7);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(mapa);camada=L.layerGroup().addTo(mapa)}
 else document.getElementById("map").innerHTML='<p style="padding:30px">Mapa indisponível: verifique a conexão com a internet.</p>';
+
+// Três regiões hidrográficas do RS, obtidas por consulta ao serviço cartográfico estadual.
+// Não altera os marcadores nem as atualizações hidrológicas existentes.
+const REGIOES_HIDROGRAFICAS={
+ uruguai:{nome:'Bacia Hidrográfica do Uruguai',cor:'#FFF4B8',chaves:['uruguai']},
+ guaiba:{nome:'Bacia Hidrográfica do Guaíba',cor:'#CDEFD5',chaves:['guaiba']},
+ litoranea:{nome:'Bacia Hidrográfica Litorânea',cor:'#F8D7E8',chaves:['litoranea','litoraneas','litoral']}
+};
+const URL_BACIAS_RS='https://iede.rs.gov.br/server/rest/services/DRH/Bacias_Hidrograficas/MapServer';
+const camadasBacias={};
+function informarBacias(msg){const el=document.getElementById('bacias-status');if(el){el.hidden=!msg;el.textContent=msg||'';}if(msg)console.warn('[Regiões hidrográficas]',msg)}
+function normalizarBacia(s){return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
+async function jsonArcgis(url){const r=await fetch(url,{cache:'force-cache'});if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(j.error)throw Error(j.error.message||'Erro ArcGIS');return j}
+async function carregarRegioesHidrograficas(){
+ if(!mapa||!window.L)return;
+ const meta=await jsonArcgis(URL_BACIAS_RS+'?f=pjson');
+ const layers=(meta.layers||[]).filter(l=>l.type==='Feature Layer'||l.type==='Group Layer'||!l.type);
+ const candidatas=layers.filter(l=>/regi[oã]es? hidro|bacias? hidro|uruguai|gua[ií]ba|litor/i.test(l.name||''));
+ const testar=candidatas.length?candidatas:layers;
+ if(!testar.length)throw Error('Serviço sem camadas consultáveis');
+ let encontradas=0;
+ for(const info of testar){
+  if(encontradas===3)break;
+  let detalhe;
+  try{detalhe=await jsonArcgis(URL_BACIAS_RS+'/'+info.id+'?f=pjson')}catch(e){continue}
+  if(!detalhe.capabilities?.includes('Query')&&!detalhe.fields?.length)continue;
+  const campos=(detalhe.fields||[]).filter(f=>f.type==='esriFieldTypeString'&&!/^(objectid|globalid|created|edited)/i.test(f.name));
+  if(!campos.length)continue;
+  // Solicita atributos e geometria somente da região buscada, sem baixar toda a base de sub-bacias.
+  for(const [chave,reg] of Object.entries(REGIOES_HIDROGRAFICAS)){
+   if(camadasBacias[chave])continue;
+   const termos=reg.chaves;
+   const condicoes=campos.flatMap(f=>termos.map(t=>`UPPER(${f.name}) LIKE '%${t.toUpperCase()}%'`));
+   const params=new URLSearchParams({f:'geojson',where:'('+condicoes.join(' OR ')+')',outFields:'*',returnGeometry:'true',outSR:'4326'});
+   try{
+    const geo=await jsonArcgis(URL_BACIAS_RS+'/'+info.id+'/query?'+params);
+    if(geo.type!=='FeatureCollection'||!geo.features?.length)continue;
+    // Evita pintar regiões indevidas quando uma camada contém textos descritivos de outras bacias.
+    const validas=geo.features.filter(feat=>Object.values(feat.properties||{}).some(v=>typeof v==='string'&&termos.some(t=>normalizarBacia(v).includes(t))));
+    if(!validas.length)continue;
+    const grupo=L.geoJSON({type:'FeatureCollection',features:validas},{style:{color:reg.cor,weight:1.6,opacity:.85,fillColor:reg.cor,fillOpacity:.38},interactive:false});
+    grupo.addTo(mapa);grupo.bringToBack();camadasBacias[chave]=grupo;encontradas++;
+   }catch(e){console.warn('Consulta de bacia',reg.nome,info.name,e.message)}
+  }
+ }
+ const controle={};for(const [chave,reg] of Object.entries(REGIOES_HIDROGRAFICAS))if(camadasBacias[chave])controle[reg.nome]=camadasBacias[chave];
+ if(encontradas)L.control.layers(null,controle,{collapsed:false,position:'topleft'}).addTo(mapa);
+ if(encontradas<3)informarBacias('Limites de regiões hidrográficas: '+encontradas+'/3 carregados. Verifique a disponibilidade da fonte IEDE/RS.');
+ else informarBacias('');
+}
+if(mapa)carregarRegioesHidrograficas().catch(e=>informarBacias('Não foi possível carregar os limites oficiais das regiões hidrográficas: '+e.message));
+
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 // Classificação baseada EXCLUSIVAMENTE na cota cadastrada e na idade da medição.
 // Verde abaixo da cota de atenção municipal; laranja até a inundação; vermelho na inundação.
