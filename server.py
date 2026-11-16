@@ -346,22 +346,53 @@ def consultar():
         dados['estacoes'].append(resultado_itaqui['estacao'])
     else:
         dados['erros'].append('Itaqui: SACE indisponível; sem medição confirmada.')
-    # Rio Pardo: prioridade ao CSV direto do SACE/SGB; nenhuma estação vizinha substitui a 85900000.
+    # Rio Pardo: escolher a medição MAIS RECENTE da mesma estação ANA 85900000.
+    # Não substituir por Praia dos Ingazeiros ou por outra régua com zero diferente.
     est_rp,diag_rp=consultar_sace_rio_pardo()
-    dados['saceRioPardoDiagnostico']=diag_rp
+    candidatos_rp=[e for e in dados['estacoes']
+                   if str(e.get('codigoEstacao') or '').strip()=='85900000']
     if est_rp:
-        dados['estacoes']=[e for e in dados['estacoes'] if str(e.get('codigoEstacao'))!='85900000']
-        dados['estacoes'].append(est_rp)
-    # ANA legado: consultar por código, apenas quando o ClimaRS não devolve a estação.
-    # Não confundir dado antigo com nível atual.
-    for nome,codigo in {"Rio Pardo":"85900000"}.items():
-        if any(str(x.get("codigoEstacao"))==codigo for x in dados["estacoes"]):continue
-        try:
-            est,diag=ana_por_codigo(nome,codigo)
-            dados.setdefault("anaDiagnostico",[]).append(diag)
-            if est:dados["estacoes"].append(est)
-        except Exception as e:
-            dados["erros"].append("ANA legado "+nome+": "+str(e))
+        candidatos_rp.append(est_rp)
+    # Se a leitura SACE estiver antiga, consultar também a telemetria ANA legado.
+    # A API pode não fornecer dados recentes; nunca simular atualização.
+    try:
+        est_ana,diag_ana=ana_por_codigo('Rio Pardo','85900000')
+        dados.setdefault('anaDiagnostico',[]).append(diag_ana)
+        if est_ana:
+            candidatos_rp.append(est_ana)
+    except Exception as exc:
+        dados['erros'].append('Rio Pardo: ANA legado: '+str(exc)[:200])
+    def _data_rp(e):
+        valor=str(e.get('dataHoraMedicao') or '').strip()
+        for formato in ('%d/%m/%Y %H:%M:%S','%d/%m/%Y %H:%M','%Y-%m-%dT%H:%M:%S'):
+            try:
+                return datetime.strptime(valor[:19],formato).replace(tzinfo=timezone(timedelta(hours=-3)))
+            except ValueError:
+                pass
+        return datetime.min.replace(tzinfo=timezone.utc)
+    dados['estacoes']=[e for e in dados['estacoes']
+                       if str(e.get('codigoEstacao') or '').strip()!='85900000']
+    if candidatos_rp:
+        escolhido=max(candidatos_rp,key=_data_rp)
+        idade_h=(datetime.now(timezone(timedelta(hours=-3)))-_data_rp(escolhido)).total_seconds()/3600
+        escolhido=dict(escolhido)
+        escolhido['horasDesdeMedicao']=round(idade_h,1)
+        escolhido['dadoAntigo']=idade_h>=12
+        escolhido['confiavel']=0<=idade_h<12
+        if idade_h>=12:
+            escolhido['status']='DADO_ANTIGO'
+            escolhido['statusLabel']='Última medição disponível (antiga)'
+            escolhido['taxaMudanca']=None
+            escolhido['taxaMudancaValor']=None
+        dados['estacoes'].append(escolhido)
+        diag_rp['fonteSelecionada']=escolhido.get('fonte')
+        diag_rp['ultimaMedicaoSelecionada']=escolhido.get('dataHoraMedicao')
+        diag_rp['dadoAntigoSelecionado']=idade_h>=12
+        if idade_h>=12:
+            dados['erros'].append('Rio Pardo: a estação 85900000 não forneceu leitura recente; exibida a última medição real, com data original.')
+    else:
+        dados['erros'].append('Rio Pardo: sem medições confirmadas da estação 85900000.')
+    dados['saceRioPardoDiagnostico']=diag_rp
     # Arroio do Meio: estação DCRS-00104 da Defesa Civil RS (Rio Taquari).
     # A fonte ClimaRS/ANA 86878700 não vinha fornecendo leitura; a estação
     # estadual tem código distinto, portanto a identidade é mostrada explicitamente.
@@ -374,6 +405,12 @@ def consultar():
         dados['estacoes'].append(est_am)
     else:
         dados['erros'].append('Arroio do Meio: nenhuma medição real disponível no histórico ou cache.')
+    # Santa Maria: consulta direta da estação DCRS-00027.
+    dados['estacoes']=[e for e in dados['estacoes'] if normal(e.get('municipio'))!='santa maria']
+    est_sm,diag_sm=consultar_santa_maria_dcrs()
+    dados['santaMariaDiagnostico']=diag_sm
+    if est_sm:dados['estacoes'].append(est_sm)
+    else:dados['erros'].append('Santa Maria: estação DCRS-00027 sem leitura confirmada.')
     return dados
 
 # Consulta pública oficial, sem credenciais HidroWebService da ANA.
@@ -410,6 +447,76 @@ DCRS_HISTORIC_QUERY="""query Historic($stationCode: String!, $startDate: String!
     opts: { ordenacao: ASC }
   )
 }"""
+
+
+def consultar_santa_maria_dcrs():
+    """Busca a última leitura real DCRS-00027, sem simular valor atual."""
+    diag={'fonte':'Defesa Civil RS / Rede Hidrometeorológica',
+          'estacao':'DCRS-00027','municipio':'Santa Maria',
+          'url':'https://redehidrometeorologica.defesacivil.rs.gov.br/Estacao/DCRS-00027',
+          'automatico':False}
+    tz=timezone(timedelta(hours=-3)); agora=datetime.now(tz)
+    try:
+        payload=json.dumps({'query':DCRS_HISTORIC_QUERY,'variables':{
+            'stationCode':'DCRS-00027',
+            'startDate':(agora-timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S'),
+            'endDate':agora.strftime('%Y-%m-%d %H:%M:%S'),
+            'interval':'HOUR_1'}}).encode('utf-8')
+        req=urllib.request.Request(DCRS_GRAPHQL,data=payload,headers={
+            'Content-Type':'application/json','Accept':'application/json',
+            'User-Agent':'Dashboard-Hidrologico-3DE/1.0'},method='POST')
+        with urllib.request.urlopen(req,timeout=22) as r:
+            resposta=json.loads(r.read(3_000_000).decode('utf-8'))
+        if resposta.get('errors'):raise ValueError(str(resposta['errors'])[:250])
+        items=(((resposta.get('data') or {}).get('historic') or {}).get('items') or [])
+        leituras=[]
+        for item in items:
+            if str(item.get('codigo') or 'DCRS-00027')!='DCRS-00027':continue
+            valor=item.get('rio_nivel')
+            if isinstance(valor,bool) or not isinstance(valor,(int,float)) or not math.isfinite(valor) or not 0<=valor<=200:continue
+            try:
+                dt=datetime.fromisoformat(str(item['ts']).replace('Z','+00:00'))
+                if dt.tzinfo is None:dt=dt.replace(tzinfo=tz)
+                dt=dt.astimezone(tz)
+            except (ValueError,TypeError,KeyError):continue
+            if -300<=(agora-dt).total_seconds()<=30*86400:
+                leituras.append((dt,float(valor),item.get('rio_variacao')))
+        if not leituras:raise ValueError('Sem leituras válidas para DCRS-00027')
+        leituras.sort(key=lambda x:x[0]); dt,nivel,variacao=leituras[-1]
+        idade=max(0,(agora-dt).total_seconds()/3600)
+        delta=None
+        if isinstance(variacao,(int,float)) and not isinstance(variacao,bool) and math.isfinite(variacao):
+            delta=round(variacao*100,1)
+        if delta is None:
+            anteriores=[(abs((dt-d).total_seconds()-3600),v) for d,v,_ in leituras[:-1]
+                        if 1800<=(dt-d).total_seconds()<=5400]
+            if anteriores:delta=round((nivel-min(anteriores)[1])*100,1)
+        tendencia=None
+        if delta is not None:
+            num=('%g'%abs(delta)).replace('.',',')
+            tendencia=('Subiu '+num+' cm na última hora' if delta>0 else
+                       'Desceu '+num+' cm na última hora' if delta<0 else
+                       'Estável na última hora')
+        est={'codigoEstacao':'DCRS-00027','codigoFonte':'DCRS-00027',
+             'nomeEstacao':'Santa Maria (DCRS-00027)',
+             'municipio':'Santa Maria','rio':'ARROIO CADENA',
+             'nivelCm':round(nivel*100,1),'nivelMetros':nivel,
+             'dataHoraMedicao':dt.strftime('%d/%m/%Y %H:%M:%S'),
+             'dataHoraShort':dt.strftime('%d/%m %H:%M'),
+             'confiavel':idade<12,'dadoAntigo':idade>=12,
+             'status':'DADO_ANTIGO' if idade>=12 else 'MEDICAO',
+             'taxaMudanca':tendencia if idade<12 else None,
+             'taxaMudancaValor':delta if idade<12 else None,
+             'fonte':'Defesa Civil RS (DCRS-00027)',
+             'horasDesdeMedicao':round(idade,1)}
+        diag.update(automatico=True,ultimaMedicao=est['dataHoraMedicao'],
+                    nivelMetros=nivel,registrosValidos=len(leituras),
+                    dadoAntigo=idade>=12,
+                    observacao='Verificar compatibilidade do referencial altimétrico com as cotas 68,90/69,00 m.')
+        return est,diag
+    except Exception as exc:
+        diag['erro']=str(exc)[:300]
+        return None,diag
 
 def consultar_arroio_dcrs():
     diag={'fonte':'Defesa Civil RS / Rede Hidrometeorológica',

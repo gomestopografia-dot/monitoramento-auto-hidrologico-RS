@@ -31,6 +31,7 @@ const grupos=[
 {lado:"right",rio:"Rio Jacuí",municipios:["Cachoeira do Sul"]},
 {lado:"right",rio:"Rio Taquari",municipios:["Arroio do Meio","Lajeado"]},
 {lado:"right",rio:"Rio Jacuí",municipios:["Rio Pardo"]},
+{lado:"right",rio:"Arroio Cadena",municipios:["Santa Maria"]},
 {lado:"right",rio:"Rio São Sepé",municipios:["São Sepé"]}
 ];
 // Códigos de estação informados pelo usuário; associação por código tem prioridade.
@@ -41,7 +42,8 @@ const codigosEstacoes={
  "Rio Pardo":"85900000",
 
  "Arroio do Meio":"86878700",
- "São Sepé":"85623010"
+ "São Sepé":"85623010",
+ "Santa Maria":"DCRS-00027"
 };
 const aliases={"Cachoeira do Sul":["passo sao lourenco","passo são lourenço"],"São Sepé":["camping sao sape","camping sao sepe"],"São Borja":["passo sao borja"],"Arroio do Meio":["arroio do meio"],"Lajeado":["estrela"],"Manoel Viana":["manoel viana","manuel viana"]};
 function norm(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()}
@@ -177,8 +179,8 @@ function trend(e){
  return `<span class="trend ${classe}"><span class="trend-arrow">${seta}</span><span>${esc(tendenciaEmCentimetros(descricao)||"Estável na última hora")}</span></span>`;
 }
 // Cotas verificadas nos dados fornecidos. As demais permanecem indisponíveis até validação.
-const cotasAtencao={"São Borja":7.50,"Itaqui":7.30,"Uruguaiana":7.50,"Alegrete":8.50,"Quaraí":7.50,"Rosário do Sul":5.70,"Cachoeira do Sul":8.00,"Arroio do Meio":21.00,"Lajeado":17.00,"Rio Pardo":10.00,"São Sepé":6.00,"Manoel Viana":8.60};
-const cotasInundacao={"Cachoeira do Sul":9.00,"Lajeado":19.00,"Arroio do Meio":24.50,"São Sepé":7.00,"São Borja":9.00,"Itaqui":8.30,"Uruguaiana":8.50,"Manoel Viana":9.60,"Alegrete":9.70,"Quaraí":9.50,"Rosário do Sul":6.70,"Rio Pardo":12.50};
+const cotasAtencao={"São Borja":7.50,"Itaqui":7.30,"Uruguaiana":7.50,"Alegrete":8.50,"Quaraí":7.50,"Rosário do Sul":5.70,"Cachoeira do Sul":8.00,"Arroio do Meio":21.00,"Lajeado":17.00,"Rio Pardo":10.00,"São Sepé":6.00,"Manoel Viana":8.60,"Santa Maria":68.90};
+const cotasInundacao={"Cachoeira do Sul":9.00,"Lajeado":19.00,"Arroio do Meio":24.50,"São Sepé":7.00,"São Borja":9.00,"Itaqui":8.30,"Uruguaiana":8.50,"Manoel Viana":9.60,"Alegrete":9.70,"Quaraí":9.50,"Rosário do Sul":6.70,"Rio Pardo":12.50,"Santa Maria":69.00};
 function metros(v){return Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m"}
 // Destinos oficiais por bacia. Os portais podem exigir seleção manual da estação.
 const linksFontesMunicipios={
@@ -193,7 +195,8 @@ const linksFontesMunicipios={
  "Lajeado":"https://sace.sgb.gov.br/taquari/",
  "Rio Pardo":"https://sace.sgb.gov.br/guaiba/",
  "Arroio do Meio":"https://redehidrometeorologica.defesacivil.rs.gov.br/Mapa",
- "São Sepé":"https://sace.sgb.gov.br/guaiba/"
+ "São Sepé":"https://sace.sgb.gov.br/guaiba/",
+ "Santa Maria":"https://redehidrometeorologica.defesacivil.rs.gov.br/Estacao/DCRS-00027"
 };
 function nomeMunicipioLink(mun){
  const url=linksFontesMunicipios[mun];
@@ -262,7 +265,8 @@ async function atualizar(){
    // Mesma simbologia circular da legenda: verde/laranja/vermelho.
    // Sem medição confirmada, laranja indica ausência de dado, não nível de inundação.
    for(const item of [
-     {nome:'Arroio do Meio',codigo:'86878700',rio:'Rio Taquari',lat:-29.402,lon:-51.944}
+     {nome:'Arroio do Meio',codigo:'86878700',rio:'Rio Taquari',lat:-29.402,lon:-51.944},
+      {nome:'Santa Maria',codigo:'DCRS-00027',rio:'Arroio Cadena',lat:-29.6842,lon:-53.8069}
    ]){
      const est=estacoes.find(e=>String(e.codigoEstacao||'').trim()===item.codigo && e.nivelMetros!=null);
      const lat=est && Number.isFinite(Number(est.latitude)) ? Number(est.latitude) : item.lat;
@@ -277,7 +281,7 @@ async function atualizar(){
  for(const lado of ["left","right"]){let html="";for(const g of grupos.filter(x=>x.lado===lado)){
  html+=`<h3 style="font-size:14px;color:#a7d6e8;margin:16px 0 8px">${esc(g.rio)}</h3>`;
  for(const mun of g.municipios){const e=escolher(estacoes,mun,g.rio);html+=card(mun,g.rio,e);if(e){selecionadas++;
- if(camada && mun!=="Arroio do Meio" && Number.isFinite(Number(e.latitude))&&Number.isFinite(Number(e.longitude))){const c=cor(e,mun);const cores={green:"#42ba72",orange:"#f3a13d",red:"#e94b55",gray:"#f3a13d",'sem-cota':'#8294a4'};L.circleMarker([Number(e.latitude),Number(e.longitude)],{radius:9,color:"#fff",weight:2,fillColor:cores[c],fillOpacity:.95}).addTo(camada).bindPopup(`<b>${esc(g.rio)} — ${esc(mun)}${mun==="São Borja"?" (estação Passo São Borja)":""}</b><br>${esc(e.nomeEstacao)}<br>${Number(e.nivelMetros).toLocaleString("pt-BR")} m<br>${esc(e.dataHoraMedicao)}`)}
+ if(camada && mun!=="Arroio do Meio" && mun!=="Santa Maria" && Number.isFinite(Number(e.latitude))&&Number.isFinite(Number(e.longitude))){const c=cor(e,mun);const cores={green:"#42ba72",orange:"#f3a13d",red:"#e94b55",gray:"#f3a13d",'sem-cota':'#8294a4'};L.circleMarker([Number(e.latitude),Number(e.longitude)],{radius:9,color:"#fff",weight:2,fillColor:cores[c],fillOpacity:.95}).addTo(camada).bindPopup(`<b>${esc(g.rio)} — ${esc(mun)}${mun==="São Borja"?" (estação Passo São Borja)":""}</b><br>${esc(e.nomeEstacao)}<br>${Number(e.nivelMetros).toLocaleString("pt-BR")} m<br>${esc(e.dataHoraMedicao)}`)}
  }}}
  document.getElementById(lado).innerHTML=html}
  atualizarChuvaQuadros();
