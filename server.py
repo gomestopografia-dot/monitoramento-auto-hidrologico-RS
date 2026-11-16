@@ -373,12 +373,32 @@ def consultar():
     if est_am:
         dados['estacoes'].append(est_am)
     else:
-        dados['erros'].append('Arroio do Meio: DCRS-00104 sem leitura atual confirmada.')
+        dados['erros'].append('Arroio do Meio: nenhuma medição real disponível no histórico ou cache.')
     return dados
 
 # Consulta pública oficial, sem credenciais HidroWebService da ANA.
 # O endpoint só permite a consulta Historic no formato documentado.
 DCRS_GRAPHQL='https://redehidrometeorologica.defesacivil.rs.gov.br/graphql'
+ARROIO_ULTIMA_LEITURA=ROOT/'arroio_ultima_leitura.json'
+
+def _ler_ultima_arroio():
+    try:
+        dado=json.loads(ARROIO_ULTIMA_LEITURA.read_text(encoding='utf-8'))
+        est=dado.get('estacao')
+        if isinstance(est,dict) and est.get('codigoFonte')=='DCRS-00104' and isinstance(est.get('nivelMetros'),(int,float)):
+            return est
+    except (OSError,ValueError,TypeError,AttributeError):
+        pass
+    return None
+
+def _salvar_ultima_arroio(est):
+    try:
+        temp=ARROIO_ULTIMA_LEITURA.with_suffix('.tmp')
+        temp.write_text(json.dumps({'estacao':est},ensure_ascii=False),encoding='utf-8')
+        temp.replace(ARROIO_ULTIMA_LEITURA)
+    except OSError:
+        pass  # Render Free pode apagar o cache ao reiniciar
+
 DCRS_HISTORIC_QUERY="""query Historic($stationCode: String!, $startDate: String!, $endDate: String!, $interval: QueryInterval) {
   historic(
     system: Qualle_Hidrometeorologia
@@ -399,7 +419,7 @@ def consultar_arroio_dcrs():
     try:
         tz=timezone(timedelta(hours=-3))
         agora=datetime.now(tz)
-        inicio=agora-timedelta(hours=26)
+        inicio=agora-timedelta(days=30)
         payload=json.dumps({'query':DCRS_HISTORIC_QUERY,'variables':{
             'stationCode':'DCRS-00104',
             'startDate':inicio.strftime('%Y-%m-%d %H:%M:%S'),
@@ -424,12 +444,12 @@ def consultar_arroio_dcrs():
                 if instante.tzinfo is None:instante=instante.replace(tzinfo=tz)
                 instante=instante.astimezone(tz)
             except (ValueError,TypeError):continue
-            if -300<=(agora-instante).total_seconds()<=26*3600:
+            if -300<=(agora-instante).total_seconds()<=30*86400:
                 leituras.append((instante,float(valor),item.get('rio_variacao')))
         if not leituras:raise ValueError('Nenhuma medição válida na resposta da estação DCRS-00104')
         leituras.sort(key=lambda x:x[0]); instante,nivel,variacao=leituras[-1]
         idade=(agora-instante).total_seconds()/3600
-        if idade>12:raise ValueError(f'Última leitura tem {idade:.1f} h; não é atual')
+        # A última leitura é mantida, mas identificada como antiga quando >12h.
         delta=None
         if isinstance(variacao,(int,float)) and not isinstance(variacao,bool) and math.isfinite(variacao):
             delta=round(variacao*100,1)
@@ -460,10 +480,23 @@ def consultar_arroio_dcrs():
         diag.update(automatico=True,ultimaMedicao=est['dataHoraMedicao'],
                     nivelMetros=nivel,registrosValidos=len(leituras),
                     observacao='Cota municipal de 24,50 m não aplicada à estação DCRS até validação de referencial.')
+        _salvar_ultima_arroio(est)
         return est,diag
     except Exception as exc:
         diag['erro']=str(exc)[:300]
-        diag['observacao']='Não publicar leitura fictícia nem reutilizar dados antigos.'
+        anterior=_ler_ultima_arroio()
+        if anterior:
+            anterior=dict(anterior)
+            anterior['confiavel']=False
+            anterior['dadoAntigo']=True
+            anterior['statusLabel']='Última medição disponível (cache local; pode estar antiga)'
+            anterior['taxaMudanca']=None
+            anterior['taxaMudancaValor']=None
+            diag['cacheAnterior']=True
+            diag['ultimaMedicao']=anterior.get('dataHoraMedicao')
+            diag['observacao']='Fonte indisponível: exibindo a última medição real salva, não uma leitura atual.'
+            return anterior,diag
+        diag['observacao']='Nenhuma medição real encontrada no histórico consultado ou cache local.'
         return None,diag
 
 def ana_por_codigo(nome,codigo):
@@ -532,7 +565,6 @@ PONTOS_PREVISAO=[
     ("Cachoeira do Sul",-30.039,-52.894),
     ("Lajeado",-29.467,-51.961),
     ("Rio Pardo",-29.990,-52.378),
-    ("Dona Francisca",-29.619,-53.362),
     ("Arroio do Meio",-29.402,-51.944),
     ("São Sepé",-30.164,-53.565),
 ]
@@ -581,8 +613,13 @@ def _previsao_met_norway(nome, lat, lon, datas):
         except (KeyError,TypeError,ValueError,AttributeError):continue
     if not registros:raise ValueError("Sem previsões de precipitação de 1 hora válidas")
     pico,maior=max(registros,key=lambda x:x[1])
+    # O serviço alternativo pode fornecer apenas parte das 168 horas da semana.
+    # Não confundir o acumulado parcial com uma previsão semanal completa.
+    horas_unicas={hora:valor for hora,valor in registros}
     return {"municipio":nome,"maximoHorarioMmH":round(maior,1),"horaPico":pico,
-            "fonte":"MET Norway","horasValidas":len(registros)}
+            "acumuladoPrevistoMm":round(sum(horas_unicas.values()),1),
+            "acumuladoCompleto":len(horas_unicas)>=168,
+            "fonte":"MET Norway","horasValidas":len(horas_unicas)}
 
 
 def consultar_previsao():
@@ -617,8 +654,11 @@ def consultar_previsao():
                     and math.isfinite(valor) and 0<=valor<=1000]
                 if not registros:raise ValueError("Nenhuma hora com previsão válida")
                 hora_max,maior=max(registros,key=lambda x:x[1])
+                horas_unicas={hora:valor for hora,valor in registros}
                 pontos.append({"municipio":nome,"maximoHorarioMmH":round(maior,1),
-                               "horaPico":hora_max,"fonte":"Open-Meteo","horasValidas":len(registros)})
+                               "horaPico":hora_max,"fonte":"Open-Meteo","horasValidas":len(horas_unicas),
+                               "acumuladoPrevistoMm":round(sum(horas_unicas.values()),1),
+                               "acumuladoCompleto":len(horas_unicas)>=168})
             except (ValueError,TypeError,AttributeError) as exc:
                 erros.append({"municipio":nome,"fonte":"Open-Meteo","erro":str(exc)[:250]})
     except urllib.error.HTTPError as exc:
@@ -641,7 +681,12 @@ def consultar_previsao():
     maior=max(pontos,key=lambda p:p["maximoHorarioMmH"]) if pontos else None
     acima=[p for p in pontos if p["maximoHorarioMmH"]>50.0]
     fontes=sorted({p["fonte"] for p in pontos})
-    return {"disponivel":bool(pontos),"acima50":bool(acima),
+    # Média municipal dos acumulados de sete dias, somente para séries completas.
+    completos=[p for p in pontos if p.get("acumuladoCompleto")]
+    media_semanal=round(sum(p["acumuladoPrevistoMm"] for p in completos)/len(completos),1) if completos else None
+    return {"mediaAcumuladaMunicipiosMm":media_semanal,
+        "municipiosMediaRecebidos":len(completos),
+        "municipiosMediaEsperados":len(PONTOS_PREVISAO),"disponivel":bool(pontos),"acima50":bool(acima),
         "maiorIntensidadeMmH":maior["maximoHorarioMmH"] if maior else None,
         "municipioMaiorIntensidade":maior["municipio"] if maior else None,
         "horaMaiorIntensidade":maior["horaPico"] if maior else None,
