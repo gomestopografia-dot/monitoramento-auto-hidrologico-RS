@@ -708,39 +708,67 @@ def _acumulados_por_dia(horas_unicas, datas):
 
 
 def _previsao_met_norway(nome, lat, lon, datas):
-    """Fonte alternativa: MET Norway Locationforecast 2.0.
+    """MET Norway: combina intervalos de 1h, 6h e 12h sem sobreposição.
 
-    Apenas next_1_hours representa uma quantidade prevista para UMA hora.
-    Não converte acumulados de 6/12 horas em intensidade horária.
+    O Locationforecast fornece horas individuais no início do horizonte e
+    intervalos mais longos nos dias seguintes. Somar somente next_1_hours
+    perde a maior parte da previsão. Cada intervalo é usado uma única vez.
     """
     params=urllib.parse.urlencode({"lat":f"{lat:.3f}","lon":f"{lon:.3f}"})
     url="https://api.met.no/weatherapi/locationforecast/2.0/compact?"+params
     req=urllib.request.Request(url,headers={
         "User-Agent":"MonitoramentoHidrologico3DE/1.0 (https://github.com/gomestopografia-dot/monitoramento-hidrologico-3de)",
         "Accept":"application/json"})
-    with urllib.request.urlopen(req,timeout=12) as r:
+    with urllib.request.urlopen(req,timeout=18) as r:
         dados=json.loads(r.read(2_000_000).decode("utf-8"))
     series=dados.get("properties",{}).get("timeseries",[])
-    registros=[]
+    tz_br=timezone(timedelta(hours=-3))
+    # Indexar todos os intervalos existentes; preferir 1h, depois 6h, depois 12h.
+    # Nunca repartir uma quantidade de 6/12h artificialmente em horas.
+    candidatos=[]
     for item in series:
         try:
-            hora=datetime.fromisoformat(item["time"].replace("Z","+00:00")).astimezone(timezone(timedelta(hours=-3)))
-            if hora.date().isoformat() not in datas:continue
-            # Quantidade de precipitação em 1h (mm), numericamente equivalente a mm/h.
-            valor=item["data"]["next_1_hours"]["details"]["precipitation_amount"]
-            if isinstance(valor,bool) or not isinstance(valor,(int,float)) or not math.isfinite(valor) or not 0<=valor<=1000:continue
-            registros.append((hora.strftime("%Y-%m-%dT%H:%M"),float(valor)))
-        except (KeyError,TypeError,ValueError,AttributeError):continue
-    if not registros:raise ValueError("Sem previsões de precipitação de 1 hora válidas")
-    pico,maior=max(registros,key=lambda x:x[1])
-    # O serviço alternativo pode fornecer apenas parte das 168 horas da semana.
-    # Não confundir o acumulado parcial com uma previsão semanal completa.
-    horas_unicas={hora:valor for hora,valor in registros}
-    return {"municipio":nome,"maximoHorarioMmH":round(maior,1),"horaPico":pico,
-            "acumuladoPrevistoMm":round(sum(horas_unicas.values()),1),
-            "acumuladoCompleto":len(horas_unicas)>=168,
-            "fonte":"MET Norway","horasValidas":len(horas_unicas),
-            "chuvaDiaria":_acumulados_por_dia(horas_unicas,datas)}
+            inicio=datetime.fromisoformat(item["time"].replace("Z","+00:00")).astimezone(tz_br)
+            for duracao in (1,6,12):
+                detalhe=item.get("data",{}).get(f"next_{duracao}_hours",{}).get("details",{})
+                valor=detalhe.get("precipitation_amount")
+                if isinstance(valor,bool) or not isinstance(valor,(int,float)) or not math.isfinite(valor) or not 0<=valor<=1000:
+                    continue
+                candidatos.append((inicio,inicio+timedelta(hours=duracao),float(valor),duracao))
+        except (KeyError,TypeError,ValueError,AttributeError):
+            continue
+    if not candidatos:raise ValueError("Sem intervalos de precipitação válidos")
+    inicio_janela=datetime.fromisoformat(datas[0]).replace(tzinfo=tz_br)
+    fim_janela=datetime.fromisoformat(datas[-1]).replace(tzinfo=tz_br)+timedelta(days=1)
+    # Intervalos de menor duração têm prioridade, sem duplicar o mesmo período.
+    candidatos.sort(key=lambda x:(x[3],x[0]))
+    ocupadas=set();selecionados=[]
+    for inicio,fim,valor,duracao in candidatos:
+        if inicio<inicio_janela or fim>fim_janela:continue
+        slots=[inicio+timedelta(hours=i) for i in range(duracao)]
+        if any(slot in ocupadas for slot in slots):continue
+        selecionados.append((inicio,fim,valor,duracao))
+        ocupadas.update(slots)
+    if not selecionados:raise ValueError("Sem intervalos dentro dos sete dias")
+    chuva_diaria=[]
+    for dia in datas:
+        inicio_dia=datetime.fromisoformat(dia).replace(tzinfo=tz_br)
+        fim_dia=inicio_dia+timedelta(days=1)
+        partes=[v for ini,fim,v,d in selecionados if ini>=inicio_dia and fim<=fim_dia]
+        # Não dividir intervalos que cruzem a meia-noite: esses valores
+        # não podem ser atribuídos com precisão a um dia específico.
+        horas=sum(d for ini,fim,v,d in selecionados if ini>=inicio_dia and fim<=fim_dia)
+        chuva_diaria.append({"data":dia,"mm":round(sum(partes),1) if partes else None,
+                            "horasValidas":horas,"completo":horas>=24})
+    # Picos de 50 mm/h: exclusivamente intervalos de 1 hora.
+    individuais=[(ini,v) for ini,fim,v,d in selecionados if d==1]
+    pico,maior=max(individuais,key=lambda x:x[1]) if individuais else (None,0.0)
+    return {"municipio":nome,"maximoHorarioMmH":round(maior,1),
+            "horaPico":pico.strftime("%Y-%m-%dT%H:%M") if pico else None,
+            "acumuladoPrevistoMm":round(sum(v for _,_,v,_ in selecionados),1),
+            "acumuladoCompleto":all(d["completo"] for d in chuva_diaria),
+            "fonte":"MET Norway (1h/6h/12h)","horasValidas":len(ocupadas),
+            "chuvaDiaria":chuva_diaria}
 
 
 def consultar_previsao():
@@ -779,7 +807,7 @@ def consultar_previsao():
                 pontos.append({"municipio":nome,"maximoHorarioMmH":round(maior,1),
                                "horaPico":hora_max,"fonte":"Open-Meteo","horasValidas":len(horas_unicas),
                                "acumuladoPrevistoMm":round(sum(horas_unicas.values()),1),
-                               "acumuladoCompleto":len(horas_unicas)>=168,
+                               "acumuladoCompleto":all(d["completo"] for d in _acumulados_por_dia(horas_unicas,datas)),
                                "chuvaDiaria":_acumulados_por_dia(horas_unicas,datas)})
             except (ValueError,TypeError,AttributeError) as exc:
                 erros.append({"municipio":nome,"fonte":"Open-Meteo","erro":str(exc)[:250]})
@@ -831,16 +859,17 @@ def consultar_previsao():
         "municipiosAcima50":acima,"pontos":pontos,"erros":erros,
         "pontosRecebidos":len(pontos),"pontosEsperados":len(PONTOS_PREVISAO),
         "coberturaCompleta":len(pontos)==len(PONTOS_PREVISAO),
+        "seteDiasCompletos":len(pontos)==len(PONTOS_PREVISAO) and all(p.get("acumuladoCompleto") for p in pontos),
         "inicio":datas[0],"fim":datas[-1],
         "fonte":" / ".join(fontes) if fontes else "Open-Meteo / MET Norway (sem dados)",
-        "metodologia":"Gatilho quando qualquer município tiver uma hora prevista com precipitação superior a 50,0 mm/h; não é probabilidade operacional. Fonte MET Norway pode ter cobertura horária inferior a 7 dias.",
+        "metodologia":"Gatilho quando qualquer município tiver uma hora prevista com precipitação superior a 50,0 mm/h; não é probabilidade operacional. Fonte MET Norway combina intervalos de 1h, 6h e 12h sem sobreposição e pode ter cobertura inferior a 7 dias.",
         "erro":None,"atualizadoEm":datetime.now(timezone(timedelta(hours=-3))).isoformat()}
 
 def obter_previsao_cache():
     hoje=datetime.now(timezone(timedelta(hours=-3))).date().isoformat()
     anterior=PREVISAO_CACHE["data"]
-    # 60 minutos para previsão válida; 30 minutos em caso de erro, evitando HTTP 429 repetidos.
-    ttl=3600 if anterior and anterior.get("disponivel") else 1800
+    # 120 minutos para previsão disponível; evita requisições repetidas e HTTP 429.
+    ttl=7200 if anterior and anterior.get("disponivel") else 1800
     if anterior is None or anterior.get("inicio")!=hoje or not all("chuvaDiaria" in p for p in anterior.get("pontos",[])) or time.time()-PREVISAO_CACHE["time"]>=ttl:
         novo=consultar_previsao()
         if novo["disponivel"]:
