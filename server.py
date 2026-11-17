@@ -695,6 +695,18 @@ def _salvar_previsao_cache(dado):
     except OSError:
         pass  # Filesystem do Render Free não é persistente.
 
+def _acumulados_por_dia(horas_unicas, datas):
+    """Soma apenas horas efetivamente fornecidas; nunca inventa chuva zero."""
+    saida=[]
+    for dia in datas:
+        valores=[v for hora,v in horas_unicas.items() if hora[:10]==dia]
+        saida.append({"data":dia,
+                      "mm":round(sum(valores),1) if valores else None,
+                      "horasValidas":len(valores),
+                      "completo":len(valores)>=24})
+    return saida
+
+
 def _previsao_met_norway(nome, lat, lon, datas):
     """Fonte alternativa: MET Norway Locationforecast 2.0.
 
@@ -727,7 +739,8 @@ def _previsao_met_norway(nome, lat, lon, datas):
     return {"municipio":nome,"maximoHorarioMmH":round(maior,1),"horaPico":pico,
             "acumuladoPrevistoMm":round(sum(horas_unicas.values()),1),
             "acumuladoCompleto":len(horas_unicas)>=168,
-            "fonte":"MET Norway","horasValidas":len(horas_unicas)}
+            "fonte":"MET Norway","horasValidas":len(horas_unicas),
+            "chuvaDiaria":_acumulados_por_dia(horas_unicas,datas)}
 
 
 def consultar_previsao():
@@ -766,7 +779,8 @@ def consultar_previsao():
                 pontos.append({"municipio":nome,"maximoHorarioMmH":round(maior,1),
                                "horaPico":hora_max,"fonte":"Open-Meteo","horasValidas":len(horas_unicas),
                                "acumuladoPrevistoMm":round(sum(horas_unicas.values()),1),
-                               "acumuladoCompleto":len(horas_unicas)>=168})
+                               "acumuladoCompleto":len(horas_unicas)>=168,
+                               "chuvaDiaria":_acumulados_por_dia(horas_unicas,datas)})
             except (ValueError,TypeError,AttributeError) as exc:
                 erros.append({"municipio":nome,"fonte":"Open-Meteo","erro":str(exc)[:250]})
     except urllib.error.HTTPError as exc:
@@ -827,7 +841,7 @@ def obter_previsao_cache():
     anterior=PREVISAO_CACHE["data"]
     # 60 minutos para previsão válida; 30 minutos em caso de erro, evitando HTTP 429 repetidos.
     ttl=3600 if anterior and anterior.get("disponivel") else 1800
-    if anterior is None or anterior.get("inicio")!=hoje or time.time()-PREVISAO_CACHE["time"]>=ttl:
+    if anterior is None or anterior.get("inicio")!=hoje or not all("chuvaDiaria" in p for p in anterior.get("pontos",[])) or time.time()-PREVISAO_CACHE["time"]>=ttl:
         novo=consultar_previsao()
         if novo["disponivel"]:
             PREVISAO_CACHE["ultima_valida"]=novo
@@ -836,7 +850,7 @@ def obter_previsao_cache():
         else:
             anterior_valido=PREVISAO_CACHE["ultima_valida"] or _ler_previsao_cache()
             # Apenas previsões do mesmo período; não reaproveitar previsão de outra semana.
-            if anterior_valido and anterior_valido.get("inicio")==hoje:
+            if anterior_valido and anterior_valido.get("inicio")==hoje and all("chuvaDiaria" in p for p in anterior_valido.get("pontos",[])):
                 resultado=dict(anterior_valido)
                 resultado["erros"]=novo["erros"]
                 resultado["cacheAnterior"]=True
