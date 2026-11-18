@@ -205,12 +205,15 @@ function nomeMunicipioLink(mun){
 }
 let previsaoMunicipal={};
 function chuvaNoQuadro(mun){
- const p=previsaoMunicipal[mun];
- const valido=p&&p.acumuladoPrevistoMm!=null&&Number.isFinite(Number(p.acumuladoPrevistoMm));
- const valor=valido?Number(p.acumuladoPrevistoMm).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' mm':'—';
- const parcial=valido&&!p.acumuladoCompleto;
- const descricao=!valido?'Previsão semanal indisponível':parcial?'Previsão semanal parcial: nem todos os 7 dias possuem dados':'Previsão acumulada dos próximos 7 dias';
- return `<span class="chuva-card${valido?'':' muted'}" title="${esc(descricao)}" aria-label="${esc('Acumulado: '+valor+(parcial?', dados parciais':''))}"><span class="chuva-card-icone" aria-hidden="true">🌧️</span><span class="chuva-card-texto">Acumulado: ${esc(valor)}</span></span>`;
+ const dias=previsaoMunicipal[mun]?.chuvaDiaria;
+ const disponiveis=Array.isArray(dias)?dias.slice(0,7).filter(d=>d&&d.mm!=null&&Number.isFinite(Number(d.mm))):[];
+ const completo=Array.isArray(dias)&&dias.length>=7&&dias.slice(0,7).every(d=>d&&d.mm!=null&&Number.isFinite(Number(d.mm))&&d.completo===true);
+ const valido=disponiveis.length>0;
+ const total=disponiveis.reduce((s,d)=>s+Number(d.mm),0);
+ const valor=valido?total.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' mm':'—';
+ const titulo=!valido?'Previsão indisponível':completo?'Soma da previsão diária dos 7 dias':'Soma parcial: um ou mais dias não possuem previsão completa';
+ const rotulo=completo?'Acumulado':'Acumulado parcial';
+ return `<span class="chuva-card${valido?'':' muted'}" title="${esc(titulo)}" aria-label="${esc(rotulo+': '+valor)}"><span class="chuva-card-icone" aria-hidden="true">🌧️</span><span class="chuva-card-texto">${esc(rotulo)}: ${esc(valor)}</span></span>`;
 }
 function chuvaDiariaNoQuadro(mun){
  const dias=previsaoMunicipal[mun]?.chuvaDiaria;
