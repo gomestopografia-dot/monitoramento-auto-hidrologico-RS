@@ -889,10 +889,176 @@ def obter_previsao_cache():
         PREVISAO_CACHE.update(data=resultado,time=time.time())
     return PREVISAO_CACHE["data"]
 
+
+# Avisos oficiais do INMET: consulta independente e cache de 10 minutos.
+INMET_AVISOS_URL="https://apiprevmet3.inmet.gov.br/avisos/ativos"
+INMET_LOCK=threading.Lock()
+INMET_CACHE={"time":0,"data":None}
+
+def _codigos_rs(a):
+    codigos=set()
+    for key in ('geocodes','municipios','municipalities','codigosMunicipios'):
+        val=a.get(key)
+        if isinstance(val,str):val=re.split(r'[,;\s]+',val)
+        if isinstance(val,list):
+            for item in val:
+                if isinstance(item,dict):
+                    codigo=str(item.get('codigo') or item.get('codigo_ibge') or item.get('geocode') or item.get('id') or '')
+                else:codigo=str(item)
+                if re.fullmatch(r'43\d{5}',codigo):codigos.add(codigo)
+    return sorted(codigos)
+
+def _aviso_rs(a):
+    if not isinstance(a,dict):return False
+    if _codigos_rs(a):return True
+    for key in ('uf','estado','siglaUf','sigla_uf'):
+        if str(a.get(key) or '').strip().upper() in ('RS','RIO GRANDE DO SUL'):return True
+    return False
+
+def _poligono_aviso(a):
+    # Aceitar apenas GeoJSON válido de Polygon/MultiPolygon publicado pela fonte.
+    geo=a.get('poligono') or a.get('polygon') or a.get('geometry')
+    if isinstance(geo,str):
+        try:geo=json.loads(geo)
+        except (ValueError,TypeError):return None
+    if isinstance(geo,dict) and geo.get('type')=='Feature':geo=geo.get('geometry')
+    if not isinstance(geo,dict) or geo.get('type') not in ('Polygon','MultiPolygon'):return None
+    coords=geo.get('coordinates')
+    if not isinstance(coords,list):return None
+    # Limitar payload; não fabricar geometrias quando ausentes.
+    if len(json.dumps(coords))>500000:return None
+    return {'type':geo['type'],'coordinates':coords}
+
+def _texto_aviso(a,*keys):
+    for k in keys:
+        v=a.get(k)
+        if isinstance(v,(str,int,float)) and str(v).strip():return str(v).strip()[:1200]
+    return ''
+
+def obter_alertas_inmet():
+    with INMET_LOCK:
+        if INMET_CACHE['data'] is not None and time.time()-INMET_CACHE['time']<600:
+            return INMET_CACHE['data']
+        agora=datetime.now(timezone.utc).isoformat()
+        try:
+            dados=getjson(INMET_AVISOS_URL,timeout=18)
+            if not isinstance(dados,(dict,list)):raise ValueError('Formato inesperado da API INMET')
+            colecoes=([('vigente',dados)] if isinstance(dados,list) else [(k,dados.get(k,[])) for k in ('hoje','futuro')])
+            avisos=[];vistos=set()
+            for periodo,itens in colecoes:
+                if not isinstance(itens,list):continue
+                for a in itens:
+                    if not _aviso_rs(a):continue
+                    codigo=_texto_aviso(a,'id','id_aviso','codigo','identifier')
+                    titulo=_texto_aviso(a,'descricao','titulo','evento','tipo','fenomeno')
+                    chave=(codigo or titulo,_texto_aviso(a,'data_inicio','inicio'))
+                    if chave in vistos:continue
+                    vistos.add(chave)
+                    municipios=a.get('municipios')
+                    nomes=[]
+                    if isinstance(municipios,list):
+                        nomes=[str(x.get('nome') or x.get('municipio') or '')[:90] for x in municipios if isinstance(x,dict) and (str(x.get('uf') or '').upper()=='RS' or str(x.get('codigo') or x.get('id') or '').startswith('43'))]
+                    avisos.append({'id':codigo,'titulo':titulo or 'Aviso meteorológico',
+                        'severidade':_texto_aviso(a,'severidade','grau','nivel'),
+                        'inicio':_texto_aviso(a,'data_inicio','inicio','start'),
+                        'fim':_texto_aviso(a,'data_fim','fim','end'),
+                        'riscos':_texto_aviso(a,'riscos','risco','risk'),
+                        'instrucoes':_texto_aviso(a,'instrucoes','instrucoes_segurança','instruction'),
+                        'municipios':nomes[:497],'codigosIbgeRS':_codigos_rs(a),
+                        'granizo':('granizo' in normal(' '.join(str(a.get(k) or '') for k in ('riscos','descricao','titulo','evento','tipo','fenomeno')))),
+                        'geometria':_poligono_aviso(a),'periodoFonte':periodo,
+                        'url':('https://avisos.inmet.gov.br/'+codigo if codigo.isdigit() else 'https://avisos.inmet.gov.br/')})
+            resultado={'fonte':'INMET','situacaoConsulta':'ok','consultadoEm':agora,
+                'avisos':avisos,'total':len(avisos),'observacao':'Avisos para o RS com identificação explícita de UF ou código IBGE. Não é detecção de tornados.'}
+        except Exception as exc:
+            resultado={'fonte':'INMET','situacaoConsulta':'indisponivel','consultadoEm':agora,
+                'avisos':[],'total':None,'erro':str(exc)[:240],
+                'observacao':'Consulta indisponível; não interpretar como ausência de alertas.'}
+        INMET_CACHE.update(time=time.time(),data=resultado)
+        return resultado
+
+
+# Proxy restrito para limites hidrográficos oficiais IEDE/RS.
+# O navegador consulta este servidor, evitando bloqueios de origem cruzada (CORS).
+IEDE_BACIAS_BASE='https://iede.rs.gov.br/server/rest/services/DRH/Bacias_Hidrograficas/MapServer'
+BACIAS_CACHE={}
+BACIAS_LOCK=threading.Lock()
+BACIAS_REGIOES={'uruguai':'Uruguai','guaiba':'Guaíba','litoranea':'Litoral'}
+
+def obter_bacia_geojson(chave):
+    if chave not in BACIAS_REGIOES:
+        return {'error':{'message':'Região inválida'}}
+    # Prioriza limites oficiais baixados e validados localmente.
+    # Não utiliza polígonos aproximados ou inventados.
+    arquivo=ROOT/'bacias'/(chave+'.geojson')
+    if arquivo.is_file():
+        try:
+            dados=json.loads(arquivo.read_text(encoding='utf-8-sig'))
+            if (dados.get('type')=='FeatureCollection' and
+                isinstance(dados.get('features'),list) and
+                any(f.get('geometry') for f in dados['features'])):
+                return dados
+            return {'error':{'message':'GeoJSON local inválido ou sem geometrias: '+arquivo.name}}
+        except Exception as exc:
+            return {'error':{'message':'Erro lendo GeoJSON local: '+str(exc)[:180]}}
+
+    with BACIAS_LOCK:
+        entrada=BACIAS_CACHE.get(chave)
+        if entrada and time.time()-entrada[0]<86400:return entrada[1]
+    try:
+        # A camada não é presumida: localizar o campo 'regiao' no catálogo oficial.
+        catalogo=getjson(IEDE_BACIAS_BASE+'?f=pjson',timeout=18)
+        camadas=catalogo.get('layers',[])
+        if not camadas:raise ValueError('Catálogo IEDE sem camadas')
+        falhas=[]
+        for camada in camadas:
+            ident=camada.get('id')
+            if ident is None:continue
+            try:
+                meta=getjson(f'{IEDE_BACIAS_BASE}/{ident}?f=pjson',timeout=15)
+                campos=meta.get('fields') or []
+                campo=next((f['name'] for f in campos if normal(f.get('name'))=='regiao'),None)
+                if not campo:continue
+                valor=BACIAS_REGIOES[chave]
+                # Usar a grafia registrada na fonte e incluir grafias sem acento.
+                termos={'Uruguai':['Uruguai'],'Guaíba':['Guaíba','Guaiba'],'Litoral':['Litoral','Litorânea','Litoranea']}[valor]
+                cond=' OR '.join(f"{campo} = '{t}'" for t in termos)
+                params=urllib.parse.urlencode({'f':'geojson','where':f'({cond})','outFields':'*','returnGeometry':'true','outSR':'4326','geometryPrecision':'4','maxAllowableOffset':'0.004'})
+                geo=getjson(f'{IEDE_BACIAS_BASE}/{ident}/query?{params}',timeout=35)
+                if geo.get('type')=='FeatureCollection' and geo.get('features'):
+                    features=[f for f in geo['features'] if f.get('geometry') and normal(f.get('properties',{}).get(campo)) in [normal(t) for t in termos]]
+                    if features:
+                        resultado={'type':'FeatureCollection','features':features}
+                        with BACIAS_LOCK:BACIAS_CACHE[chave]=(time.time(),resultado)
+                        return resultado
+                falhas.append(f'Camada {ident}: sem polígonos correspondentes')
+            except Exception as exc:falhas.append(f'Camada {ident}: {str(exc)[:100]}')
+        raise ValueError('Não foi possível localizar os polígonos. '+'; '.join(falhas[:3]))
+    except Exception as exc:
+        return {'error':{'message':('Limites oficiais não disponíveis: '+str(exc))[:450]+'. Para funcionamento offline, adicione bacias/uruguai.geojson, bacias/guaiba.geojson e bacias/litoranea.geojson (dados oficiais).'}}
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,directory=str(ROOT),**kwargs)
     def do_GET(self):
+        if self.path.split('?')[0] == '/api/bacias':
+            query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            chave=query.get('regiao',[''])[0]
+            data=obter_bacia_geojson(chave)
+            body=json.dumps(data,ensure_ascii=False).encode('utf-8')
+            self.send_response(200 if 'error' not in data else 503)
+            self.send_header('Content-Type','application/json; charset=utf-8')
+            self.send_header('Cache-Control','no-store')
+            self.send_header('Content-Length',str(len(body)))
+            self.end_headers();self.wfile.write(body)
+            return
+        if self.path.split("?")[0] == "/api/tempo-severo":
+            data=obter_alertas_inmet()
+            body=json.dumps(data,ensure_ascii=False).encode('utf-8')
+            self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8')
+            self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)))
+            self.end_headers();self.wfile.write(body)
+            return
         if self.path.split("?")[0] == "/api/previsao":
             with PREVISAO_LOCK:
                 data=obter_previsao_cache()
