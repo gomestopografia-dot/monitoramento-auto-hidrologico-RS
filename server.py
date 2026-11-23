@@ -659,7 +659,7 @@ def ana_por_codigo(nome,codigo):
       "fonte":"ANA legado","horasDesdeMedicao":round(horas,1)},diag
 
 
-# Previsão de 7 dias: todos os 13 municípios representados nos cartões do painel.
+# Previsão de 7 dias: 14 municípios, incluindo Tupanciretã (somente chuva).
 # Barra do Fão é uma localidade, representada por coordenadas da região da estação.
 PONTOS_PREVISAO=[
     ("São Borja",-28.660,-56.004),
@@ -669,6 +669,7 @@ PONTOS_PREVISAO=[
     ("Alegrete",-29.783,-55.792),
     ("Quaraí",-30.385,-56.451),
     ("Rosário do Sul",-30.258,-54.914),
+    ("Tupanciretã",-29.080,-53.835),
     ("Cachoeira do Sul",-30.039,-52.894),
     ("Lajeado",-29.467,-51.961),
     ("Rio Pardo",-29.990,-52.378),
@@ -870,7 +871,7 @@ def obter_previsao_cache():
     anterior=PREVISAO_CACHE["data"]
     # 120 minutos para previsão disponível; evita requisições repetidas e HTTP 429.
     ttl=7200 if anterior and anterior.get("disponivel") else 1800
-    if anterior is None or anterior.get("inicio")!=hoje or not all("chuvaDiaria" in p for p in anterior.get("pontos",[])) or time.time()-PREVISAO_CACHE["time"]>=ttl:
+    if anterior is None or anterior.get("inicio")!=hoje or not all("chuvaDiaria" in p for p in anterior.get("pontos",[])) or not {p[0] for p in PONTOS_PREVISAO}.issubset({p.get("municipio") for p in anterior.get("pontos",[])}) or time.time()-PREVISAO_CACHE["time"]>=ttl:
         novo=consultar_previsao()
         if novo["disponivel"]:
             PREVISAO_CACHE["ultima_valida"]=novo
@@ -879,7 +880,7 @@ def obter_previsao_cache():
         else:
             anterior_valido=PREVISAO_CACHE["ultima_valida"] or _ler_previsao_cache()
             # Apenas previsões do mesmo período; não reaproveitar previsão de outra semana.
-            if anterior_valido and anterior_valido.get("inicio")==hoje and all("chuvaDiaria" in p for p in anterior_valido.get("pontos",[])):
+            if anterior_valido and anterior_valido.get("inicio")==hoje and all("chuvaDiaria" in p for p in anterior_valido.get("pontos",[])) and {p[0] for p in PONTOS_PREVISAO}.issubset({p.get("municipio") for p in anterior_valido.get("pontos",[])}):
                 resultado=dict(anterior_valido)
                 resultado["erros"]=novo["erros"]
                 resultado["cacheAnterior"]=True

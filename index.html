@@ -14,7 +14,7 @@
 #aba-ventos{padding:14px;max-width:1600px;margin:auto}.vento-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.vento-topo h2{margin:0;color:#b6eaff;font-size:25px}.vento-nota{color:#c1d5e1;line-height:1.55;margin:10px 0}.vento-controles{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}.vento-controles button{background:#1b4863;border:1px solid #42718a}.vento-controles button.selecionado{background:#1685ab}.vento-layout{display:grid;grid-template-columns:minmax(360px,2fr) minmax(280px,1fr);gap:12px}#mapa-ventos{height:620px;border-radius:9px;border:1px solid #41677c;background:#17354b}.vento-painel{background:#102b40;border:1px solid #31546a;border-radius:9px;padding:12px;max-height:620px;overflow:auto}.vento-linha{padding:9px 6px;border-bottom:1px solid #31546a;display:flex;justify-content:space-between;gap:10px;align-items:center}.vento-linha strong{font-size:14px}.vento-linha small{display:block;margin-top:4px}.vento-badge{border-radius:6px;padding:5px 8px;font-weight:bold;white-space:nowrap}.vento-legenda{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0;color:#d6e6ee}.vento-legenda span{display:inline-flex;gap:6px;align-items:center}.vento-legenda i{display:inline-block;width:11px;height:11px;border-radius:50%}.vento-fonte a{color:#9cdef7}.vento-mapa-marcador{border-radius:50%;border:2px solid #fff;box-shadow:0 1px 7px #0009}.vento-status{font-weight:bold;color:#e1eef5}.vento-fonte{margin-top:15px;background:#102b40;padding:12px;border-radius:8px;line-height:1.6}@media(max-width:850px){.vento-layout{grid-template-columns:1fr}#mapa-ventos{height:490px}.vento-painel{max-height:380px}}
 .vento-alertas{background:#102b40;border:1px solid #31546a;border-radius:9px;padding:14px;margin-top:14px}.vento-alertas h3{margin:0;color:#b6eaff}.aviso-inmet{background:#19394e;border:1px solid #426780;border-left:5px solid #f5c34d;border-radius:7px;margin:9px 0;padding:10px}.aviso-inmet.perigo{border-left-color:#ff8b37}.aviso-inmet.grande{border-left-color:#fa4545}.aviso-inmet small{display:block;color:#c1d5e1;margin-top:5px}.vento-alertas a{color:#9cdef7}
 .vento-camadas{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;padding:9px 12px;background:#102b40;border-radius:8px}.vento-camadas label{cursor:pointer}.aviso-granizo{display:inline-block;background:#7042a0;color:#fff;padding:3px 7px;border-radius:5px;margin-left:7px;font-size:12px}.granizo-legenda{color:#d8c5ff;font-size:12px}
-</style></head><body><nav class="abas-app" aria-label="Seções do monitoramento"><button id="btn-hidro" class="ativa" type="button" onclick="trocarAba('hidro')">🌊 Monitoramento Hidrológico</button><button id="btn-ventos" type="button" onclick="trocarAba('ventos')">🌪️ Ventos e Tempo Severo</button></nav><div id="aba-hidro"><div id="status" role="status" aria-live="polite" hidden></div><main><section class="panel"><h2>BACIA DO URUGUAI</h2><div id="left"></div><aside class="fontes-quadro" aria-label="Fontes oficiais"><div class="fontes-titulo legenda-titulo">FONTES</div><nav class="fontes-logos" aria-label="Fontes oficiais de monitoramento"><a href="https://clima.rs.gov.br/" target="_blank" rel="noopener noreferrer" title="Abrir https://clima.rs.gov.br/"><img src="assets/logo-clima-rs.png" alt="Clima RS"></a><a href="https://sace.sgb.gov.br/" target="_blank" rel="noopener noreferrer" title="Acessar SACE - Serviço Geológico do Brasil"><img src="assets/logo-sgb.png" alt="Serviço Geológico do Brasil - SGB"></a><a href="https://redehidrometeorologica.defesacivil.rs.gov.br/Mapa" target="_blank" rel="noopener noreferrer" title="Abrir mapa da Rede Hidrometeorológica da Defesa Civil RS"><img src="assets/logo-defesa-civil.png" alt="Defesa Civil do Rio Grande do Sul"></a></nav></aside></section><section class="panel map-panel"><div class="row"><h2 id="titulo-mapa">MONITORAMENTO HIDROLÓGICO</h2><span class="muted" id="total" hidden></span></div><div id="map"><div id="bacias-status" class="bacias-status" hidden></div></div><div class="forecast-note" id="previsao-semanal" aria-label="Texto de planejamento">
+</style></head><body><nav class="abas-app" aria-label="Seções do monitoramento"><button id="btn-hidro" class="ativa" type="button" onclick="trocarAba('hidro')">🌊 Monitoramento Hidrológico</button><button id="btn-ventos" type="button" onclick="trocarAba('ventos')">🌪️ Ventos e Tempo Severo</button></nav><div id="aba-hidro"><div id="status" role="status" aria-live="polite" hidden></div><main><section class="panel"><h2>BACIA DO URUGUAI</h2><div id="left"></div><aside class="fontes-quadro" aria-label="Fontes oficiais"><div class="fontes-titulo legenda-titulo">FONTES</div><nav class="fontes-logos" aria-label="Fontes oficiais de monitoramento"><a href="https://clima.rs.gov.br/" target="_blank" rel="noopener noreferrer" title="Abrir https://clima.rs.gov.br/"><img src="assets/logo-clima-rs.png" alt="Clima RS"></a><a href="https://sace.sgb.gov.br/" target="_blank" rel="noopener noreferrer" title="Acessar SACE - Serviço Geológico do Brasil"><img src="assets/logo-sgb.png" alt="Serviço Geológico do Brasil - SGB"></a><a href="https://redehidrometeorologica.defesacivil.rs.gov.br/Mapa" target="_blank" rel="noopener noreferrer" title="Abrir mapa da Rede Hidrometeorológica da Defesa Civil RS"><img src="assets/logo-defesa-civil.png" alt="Defesa Civil do Rio Grande do Sul"></a><a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer" title="Open-Meteo — documentação da previsão de chuvas"><img src="assets/logo-open-meteo.webp" alt="Open-Meteo"></a><a href="https://api.met.no/weatherapi/locationforecast/2.0/documentation?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer" title="MET Norway — documentação da previsão meteorológica"><img src="assets/logo-met-norway.webp" alt="MET Norway"></a></nav></aside></section><section class="panel map-panel"><div class="row"><h2 id="titulo-mapa">MONITORAMENTO HIDROLÓGICO</h2><span class="muted" id="total" hidden></span></div><div id="map"><div id="bacias-status" class="bacias-status" hidden></div></div><div class="forecast-note" id="previsao-semanal" aria-label="Texto de planejamento">
 <p>A <span id="tipo-media-chuva">média da previsão de chuvas para a semana de</span> <strong id="periodo-chuva">—</strong> é de <strong id="chuva-prevista">consultando...</strong>.</p>
 
 <small>Média dos acumulados previstos para os municípios com cobertura comparável. Quando a fonte oferecer menos de 7 dias, o resultado será identificado como parcial (Open-Meteo / MET Norway). Dias com previsão inferior a 24 horas são identificados como parciais. Não constitui avaliação operacional. <span id="previsao-atualizacao"></span></small>
@@ -33,6 +33,7 @@ const grupos=[
 {lado:"left",rio:"Rio Ibirapuitã",municipios:["Alegrete"]},
 {lado:"left",rio:"Rio Quaraí",municipios:["Quaraí"]},
 {lado:"left",rio:"Rio Santa Maria",municipios:["Rosário do Sul"]},
+{lado:"right",rio:null,municipios:["Tupanciretã"],somenteChuva:true},
 {lado:"right",rio:"Rio Jacuí",municipios:["Cachoeira do Sul"]},
 {lado:"right",rio:"Rio Taquari",municipios:["Arroio do Meio","Lajeado"]},
 {lado:"right",rio:"Rio Jacuí",municipios:["Rio Pardo"]},
@@ -233,6 +234,10 @@ function atualizarChuvaQuadros(){
   if(mun&&diario)diario.outerHTML=chuvaDiariaNoQuadro(mun);
  });
 }
+// Município sem monitoramento de rio: apenas previsão de precipitação.
+function cardSomenteChuva(mun){
+ return `<article class="river" data-somente-chuva="true"><div class="row">${nomeMunicipioLink(mun)}<span class="chuva-card" style="font-size:12px">🌧️ Somente chuva</span></div><div class="chuva-previsao-rodape">${chuvaDiariaNoQuadro(mun)}${chuvaNoQuadro(mun)}</div></article>`;
+}
 function card(mun,rio,e){
  const estado=classificacao(e,mun);
  const atual=e&&e.nivelMetros!=null?metros(e.nivelMetros):'—';
@@ -294,8 +299,17 @@ async function atualizar(){
    }
   }
  for(const lado of ["left","right"]){let html="";for(const g of grupos.filter(x=>x.lado===lado)){
- html+=`<h3 style="font-size:14px;color:#a7d6e8;margin:16px 0 8px">${esc(g.rio)}</h3>`;
- for(const mun of g.municipios){const e=escolher(estacoes,mun,g.rio);html+=card(mun,g.rio,e);if(e){selecionadas++;
+ if(g.rio)html+=`<h3 style="font-size:14px;color:#a7d6e8;margin:16px 0 8px">${esc(g.rio)}</h3>`;
+ for(const mun of g.municipios){if(g.somenteChuva){
+  html+=cardSomenteChuva(mun);
+  // Ponto geográfico do município, sem associar uma estação ou nível de rio.
+  if(camada && mun==="Tupanciretã"){
+   L.circleMarker([-29.0800,-53.8350],{
+    radius:9,color:'#fff',weight:2,fillColor:'#38a8e8',fillOpacity:.95
+   }).addTo(camada).bindPopup(`<b>${esc(mun)} — RS</b><br>🌧️ Monitoramento somente de previsão de chuvas.<br>Consulte o quadro do município para o acumulado e os próximos 7 dias.`);
+  }
+  continue;
+ }const e=escolher(estacoes,mun,g.rio);html+=card(mun,g.rio,e);if(e){selecionadas++;
  if(camada && mun!=="Arroio do Meio" && mun!=="Santa Maria" && Number.isFinite(Number(e.latitude))&&Number.isFinite(Number(e.longitude))){const c=cor(e,mun);const cores={green:"#42ba72",orange:"#f3a13d",red:"#e94b55",gray:"#f3a13d",'sem-cota':'#8294a4'};L.circleMarker([Number(e.latitude),Number(e.longitude)],{radius:9,color:"#fff",weight:2,fillColor:cores[c],fillOpacity:.95}).addTo(camada).bindPopup(`<b>${esc(g.rio)} — ${esc(mun)}${mun==="São Borja"?" (estação Passo São Borja)":""}</b><br>${esc(e.nomeEstacao)}<br>${Number(e.nivelMetros).toLocaleString("pt-BR")} m<br>${esc(e.dataHoraMedicao)}`)}
  }}}
  document.getElementById(lado).innerHTML=html}
