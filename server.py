@@ -1119,12 +1119,26 @@ if __name__=="__main__":
     try:
         server=ThreadingHTTPServer((endereco,porta),Handler)
     except OSError as e:
-        print(f"ERRO ao iniciar na porta {porta}: {e}", flush=True)
-        if not hospedado:
+        if hospedado:
+            print(f"ERRO ao iniciar na porta {porta}: {e}", flush=True)
+            raise SystemExit(1)
+        print(f"Porta {porta} ocupada por outra versão. Buscando porta livre...", flush=True)
+        # Não abrir uma versão antiga já rodando em localhost:8000.
+        for alternativa in range(8001, 8021):
+            try:
+                server=ThreadingHTTPServer((endereco,alternativa),Handler)
+                porta=alternativa
+                break
+            except OSError:
+                continue
+        else:
+            print("ERRO: nenhuma porta livre entre 8001 e 8020", flush=True)
             input("Pressione Enter para fechar...")
-        raise SystemExit(1)
+            raise SystemExit(1)
     if not hospedado:
-        threading.Timer(1.2,lambda:webbrowser.open(f"http://localhost:{porta}")).start()
+        url=f"http://127.0.0.1:{porta}/?versao=tupancireta-3abas-20261123"
+        print(f"ABRA ESTE ENDERECO: {url}", flush=True)
+        threading.Timer(1.2,lambda:webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
